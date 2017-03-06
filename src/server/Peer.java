@@ -1,44 +1,20 @@
 package server;
 
-import java.net.InetAddress;
-import java.rmi.AlreadyBoundException;
-import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
-
-import common.Common;
+import java.net.MulticastSocket;
 
 public class Peer {
-    public static void main(String[] args) {
-        int protocolVersion = Integer.parseInt(args[0]);
+    private final String protocolVersion;
+    private final int serverId;
+    private final MulticastSocket controlChannel;
+    private final MulticastSocket backupChannel;
+    private final MulticastSocket recoveryChannel;
 
-        int serverId = Integer.parseInt(args[1]);
-
-        String serviceAccessPoint = args[2];
-
-        InetAddress controlChannelAddr = Common.parseAddress(args[3]);
-        int controlChannelPort = Integer.parseInt(args[4]);
-
-        InetAddress dataChannelAddr = Common.parseAddress(args[5]);
-        int dataChannelPort = Integer.parseInt(args[6]);
-
-        InetAddress dataRecoveryChannelAddr = Common.parseAddress(args[7]);
-        int dataRecoveryChannelPort = Integer.parseInt(args[8]);
-
-        InitiatorPeer initiatorPeer = null;
-
-        try {
-            initiatorPeer = new InitiatorPeer();
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        }
-
-        try {
-            Registry registry = LocateRegistry.getRegistry();
-            registry.bind(serviceAccessPoint, initiatorPeer);
-        } catch (RemoteException | AlreadyBoundException e) {
-            e.printStackTrace();
-        }
+    public Peer(String protocolVersion, int serverId, MulticastSocket controlChannel, MulticastSocket backupChannel, MulticastSocket recoveryChannel) {
+        this.protocolVersion = protocolVersion;
+        this.serverId = serverId;
+        this.controlChannel = controlChannel;
+        this.backupChannel = backupChannel;
+        this.recoveryChannel = recoveryChannel;
     }
 }
 

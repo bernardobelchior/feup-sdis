@@ -2,12 +2,20 @@ package server;
 
 import common.IBackupServer;
 
+import java.net.MulticastSocket;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
 public class InitiatorPeer extends UnicastRemoteObject implements IBackupServer {
-    protected InitiatorPeer() throws RemoteException {
+    private final MulticastSocket controlChannel;
+    private final MulticastSocket backupChannel;
+    private final MulticastSocket recoveryChannel;
+
+    public InitiatorPeer(MulticastSocket controlChannel, MulticastSocket backupChannel, MulticastSocket recoveryChannel) throws RemoteException {
         super();
+        this.controlChannel = controlChannel;
+        this.backupChannel = backupChannel;
+        this.recoveryChannel = recoveryChannel;
     }
 
     @Override
