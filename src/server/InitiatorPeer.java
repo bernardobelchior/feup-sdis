@@ -2,6 +2,9 @@ package server;
 
 import common.IBackupServer;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.net.MulticastSocket;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
@@ -21,6 +24,26 @@ public class InitiatorPeer extends UnicastRemoteObject implements IBackupServer 
     @Override
     public void backup(String filename, int replicationDegree) throws RemoteException {
         System.out.println("Backup");
+
+        FileInputStream inputStream;
+        try {
+            inputStream = new FileInputStream(filename);
+        } catch (FileNotFoundException e) {
+            System.err.println("File " + filename + " not found.");
+            e.printStackTrace();
+            return;
+        }
+
+        byte[] chunk = new byte[64 * 1024];
+
+        try {
+            while (inputStream.read(chunk) != -1) {
+
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
     }
 
     @Override
@@ -42,6 +65,10 @@ public class InitiatorPeer extends UnicastRemoteObject implements IBackupServer 
     public String state() throws RemoteException {
         System.out.println("State");
         return null;
+    }
+
+    private sendMessage(String fileId, int chunkNo, int replicationDegree) {
+
     }
 }
 

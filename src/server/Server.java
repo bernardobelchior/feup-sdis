@@ -10,9 +10,6 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
-/**
- * Created by bernardo on 3/6/17.
- */
 public class Server {
     public static void main(String[] args) {
         String protocolVersion = args[0];
