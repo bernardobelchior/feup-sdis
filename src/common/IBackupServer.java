@@ -13,33 +13,33 @@ public interface IBackupServer extends Remote {
      * @param filename          Name of file to backup.
      * @param replicationDegree Number of copies of each chunk to keep around at any time.
      */
-    public void backup(String filename, int replicationDegree) throws RemoteException;
+    void backup(String filename, int replicationDegree) throws RemoteException;
 
     /**
      * Restores backed up file with name {@filename}.
      *
      * @param filename Name of file to restore.
      */
-    public void restore(String filename) throws RemoteException;
+    void restore(String filename) throws RemoteException;
 
     /**
      * Deletes file with name {@filename} from the server network.
      *
      * @param filename Name of file to delete.
      */
-    public void delete(String filename) throws RemoteException;
+    void delete(String filename) throws RemoteException;
 
     /**
      * Changes space allocated to the backup service to {@spaceReserved} bytes.
      *
      * @param spaceReserved Number of bytes to allocate to the backup service.
      */
-    public void reclaim(int spaceReserved) throws RemoteException;
+    void reclaim(int spaceReserved) throws RemoteException;
 
     /**
      * Gives information about the current state of the server.
      *
      * @return Information about the current state of the server.
      */
-    public String state() throws RemoteException;
+    String state() throws RemoteException;
 }

@@ -9,7 +9,7 @@ import java.rmi.registry.Registry;
 
 public class TestApp {
 
-    public  static IBackupServer initiatorPeer;
+    private static IBackupServer initiatorPeer;
 
     public static void main(String[] args) {
 
@@ -20,18 +20,16 @@ public class TestApp {
         try {
             Registry registry = LocateRegistry.getRegistry("localhost");
             initiatorPeer = (IBackupServer) registry.lookup(peerAccessPoint);
-        } catch (NotBoundException e) {
-            e.printStackTrace();
-        } catch (RemoteException e) {
+        } catch (NotBoundException | RemoteException e) {
             e.printStackTrace();
         }
 
-        switch (operation){
+        switch (operation) {
             case "BACKUP":
                 pathName = args[2];
                 int replicationDegree = Integer.parseInt(args[3]);
                 try {
-                    initiatorPeer.backup(pathName,replicationDegree);
+                    initiatorPeer.backup(pathName, replicationDegree);
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }

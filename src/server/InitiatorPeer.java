@@ -5,9 +5,9 @@ import common.IBackupServer;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
-public class InitiatorPeer implements IBackupServer {
+public class InitiatorPeer extends UnicastRemoteObject implements IBackupServer {
     protected InitiatorPeer() throws RemoteException {
-
+        super();
     }
 
     @Override

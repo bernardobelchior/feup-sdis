@@ -5,13 +5,11 @@ import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
-import java.rmi.server.UnicastRemoteObject;
+
 import common.Common;
-import common.IBackupServer;
 
 public class Peer {
     public static void main(String[] args) {
-
         int protocolVersion = Integer.parseInt(args[0]);
 
         int serverId = Integer.parseInt(args[1]);
@@ -30,21 +28,17 @@ public class Peer {
         InitiatorPeer initiatorPeer = null;
 
         try {
-           initiatorPeer = new InitiatorPeer();
+            initiatorPeer = new InitiatorPeer();
         } catch (RemoteException e) {
             e.printStackTrace();
         }
 
         try {
-           IBackupServer stub = (IBackupServer) UnicastRemoteObject.exportObject(initiatorPeer,0);
             Registry registry = LocateRegistry.getRegistry();
-            registry.bind(serviceAccessPoint,stub);
-        } catch (RemoteException e) {
-            e.printStackTrace();
-        } catch (AlreadyBoundException e) {
+            registry.bind(serviceAccessPoint, initiatorPeer);
+        } catch (RemoteException | AlreadyBoundException e) {
             e.printStackTrace();
         }
     }
-
 }
 
