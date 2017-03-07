@@ -12,7 +12,7 @@ public class TestApp {
     private static IInitiatorPeer initiatorPeer;
 
     public static void main(String[] args) {
-
+        /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
 
         String peerAccessPoint = args[0];

@@ -1,10 +1,9 @@
 package server;
 
-import common.Common;
+import server.channel.BackupChannel;
+import server.channel.ControlChannel;
+import server.channel.RecoveryChannel;
 
-import java.io.IOException;
-import java.net.InetAddress;
-import java.net.MulticastSocket;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -29,48 +28,36 @@ public class Server {
 
     public static final String CRLF = "" + (char) 0xD + (char) 0xA;
 
-    public static final int CHUNK_SIZE = 64*1024;
+    public static final int CHUNK_SIZE = 64 * 1024;
 
     public static void main(String[] args) {
-
+        /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
+
         String protocolVersion = args[0];
         int serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
 
-        MulticastSocket controlChannel = Server.createMulticastSocket(args[3], args[4]);
-        MulticastSocket backupChannel = Server.createMulticastSocket(args[5], args[6]);
-        MulticastSocket recoveryChannel = Server.createMulticastSocket(args[7], args[8]);
+        Peer peer = new Peer(protocolVersion, serverId);
 
-        Peer peer = null;
+        ControlChannel controlChannel = new ControlChannel(peer, args[3], args[4]);
+        BackupChannel backupChannel = new BackupChannel(peer, args[5], args[6]);
+        RecoveryChannel recoveryChannel = new RecoveryChannel(peer, args[7], args[8]);
+
+        InitiatorPeer initiatorPeer = null;
 
         try {
-            peer = new Peer(protocolVersion, serverId, controlChannel, backupChannel, recoveryChannel);
+            initiatorPeer = new InitiatorPeer(controlChannel, backupChannel, recoveryChannel);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
 
         try {
             Registry registry = LocateRegistry.getRegistry();
-            registry.bind(serviceAccessPoint, peer);
+            registry.bind(serviceAccessPoint, initiatorPeer);
         } catch (RemoteException | AlreadyBoundException e) {
             e.printStackTrace();
         }
 
-    }
-
-    private static MulticastSocket createMulticastSocket(String addressStr, String portStr) {
-        InetAddress address = Common.parseAddress(addressStr);
-        int port = Integer.parseInt(portStr);
-
-        MulticastSocket socket = null;
-        try {
-            socket = new MulticastSocket(port);
-            socket.joinGroup(address);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return socket;
     }
 }

@@ -5,7 +5,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 public class Utils {
-
     public static byte[] sha256(String input) {
         MessageDigest digest = null;
 
