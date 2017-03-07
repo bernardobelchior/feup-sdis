@@ -7,6 +7,7 @@ import java.io.*;
 import java.net.MulticastSocket;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.Arrays;
 
 public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
     private String protocolVersion;
@@ -27,25 +28,6 @@ public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
     @Override
     public void backup(String filename, int replicationDegree) throws RemoteException {
         FileInputStream inputStream;
-        BufferedReader reader = null;
-        String content;
-
-        try {
-            reader = new BufferedReader(new FileReader("/Users/mariajoaomirapaulo/Desktop/teste2.txt"));
-
-
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-
-
-        try {
-            content = reader.readLine();
-            System.out.println("Content :" + content);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
 
         try {
             inputStream = new FileInputStream(filename);
@@ -55,15 +37,14 @@ public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
             return;
         }
 
-
         String fileId = generateFileId(filename);
-        byte[] chunk = new byte[64 * 1024];
+        byte[] chunk = new byte[Server.CHUNK_SIZE];
 
         try {
             int chunkNo = 0;
-            while (inputStream.read(chunk) != -1) {
-                sendChunk(fileId, chunkNo, replicationDegree, chunk);
-                System.out.print("chunk: " + chunk);
+            int bytesRead;
+            while ((bytesRead = inputStream.read(chunk)) != -1) {
+                sendChunk(fileId, chunkNo, replicationDegree, chunk, bytesRead);
                 chunkNo++;
             }
         } catch (IOException e) {
@@ -127,6 +108,21 @@ public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
                 + chunk;
 
         System.out.println(message);
+    }
+
+    /**
+     * Sends the specified chunk with number {@chunkNo} of file {@fileId}.
+     * Also specifies a replication degree of {@replicationDegree}.
+     *
+     * @param fileId            File Identifier
+     * @param chunkNo           Chunk number in file
+     * @param replicationDegree Minimum number of chunk replicas
+     */
+    private void sendChunk(String fileId, int chunkNo, int replicationDegree, byte[] chunk, int size) {
+        if (size != Server.CHUNK_SIZE)
+            chunk = Arrays.copyOf(chunk, size);
+
+        sendChunk(fileId, chunkNo, replicationDegree, chunk);
     }
 }
 

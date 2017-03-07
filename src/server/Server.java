@@ -29,6 +29,8 @@ public class Server {
 
     public static final String CRLF = "" + (char) 0xD + (char) 0xA;
 
+    public static final int CHUNK_SIZE = 64*1024;
+
     public static void main(String[] args) {
 
         System.setProperty("java.net.preferIPv4Stack", "true");
