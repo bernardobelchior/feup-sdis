@@ -7,12 +7,14 @@ import server.channel.RecoveryChannel;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 
 public class Server {
+    /* All time-related constants are in milliseconds */
     // Chunk Backup
     public static final String BACKUP_INIT = "PUTCHUNK";
     public static final String BACKUP_SUCCESS = "STORED";
+    public static final int BACKUP_TIMEOUT = 1000;
+    public static final int BACKUP_REPLY_DELAY = 400;
 
     // Chunk Restore
     public static final String RESTORE_INIT = "GETCHUNK";
@@ -22,12 +24,14 @@ public class Server {
     public static final String DELETE_INIT = "DELETE";
 
     // Space Reclaiming
-    public static final String RECLAIM_INIT = "REMOVED"; //TODO: Define implementation
+    public static final String RECLAIM_INIT = "RECLAIM"; //TODO: Define implementation
     public static final String RECLAIM_SUCESS = "REMOVED";
 
 
     public static final String CRLF = "" + (char) 0xD + (char) 0xA;
 
+    /* Sizes in bytes */
+    public static final int MAX_HEADER_SIZE = 512;
     public static final int CHUNK_SIZE = 64 * 1024;
 
     public static void main(String[] args) {
@@ -53,8 +57,7 @@ public class Server {
         }
 
         try {
-            Registry registry = LocateRegistry.getRegistry();
-            registry.bind(serviceAccessPoint, initiatorPeer);
+            LocateRegistry.getRegistry().bind(serviceAccessPoint, initiatorPeer);
         } catch (RemoteException | AlreadyBoundException e) {
             e.printStackTrace();
         }

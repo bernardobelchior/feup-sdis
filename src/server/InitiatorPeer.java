@@ -16,7 +16,7 @@ import java.rmi.server.UnicastRemoteObject;
 /**
  * Created by bernardo on 3/7/17.
  */
-public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer{
+public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer {
     private final ControlChannel controlChannel;
     private final BackupChannel backupChannel;
     private final RecoveryChannel recoveryChannel;
@@ -46,13 +46,13 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
             int chunkNo = 0;
             int bytesRead;
             while ((bytesRead = inputStream.read(chunk)) != -1) {
-                backupChannel.sendChunk(fileId, chunkNo, replicationDegree, chunk, bytesRead);
+                int currentChunkNo = chunkNo;
+                new Thread(() -> backupChannel.sendChunk(fileId, currentChunkNo, replicationDegree, chunk, bytesRead)).start();
                 chunkNo++;
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
-
     }
 
     @Override

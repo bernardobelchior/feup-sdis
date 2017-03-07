@@ -20,7 +20,7 @@ public class TestApp {
         String pathName;
 
         try {
-            Registry registry = LocateRegistry.getRegistry("localhost");
+            Registry registry = LocateRegistry.getRegistry("localhost"); //TODO: This is part of peerAcessPoint
             initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
             e.printStackTrace();

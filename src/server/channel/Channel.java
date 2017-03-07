@@ -6,8 +6,10 @@ import server.Server;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.util.Arrays;
 
 public class Channel {
     protected Peer peer;
@@ -16,6 +18,7 @@ public class Channel {
     public Channel(Peer peer, String address, String port) {
         this.peer = peer;
         socket = createMulticastSocket(address, port);
+        listen();
     }
 
 
@@ -34,6 +37,16 @@ public class Channel {
         return socket;
     }
 
+    protected void sendMessage(byte[] message) {
+        DatagramPacket packet = new DatagramPacket(message, message.length);
+
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
     /**
      * Creates the message that only uses a header.
      * Header format:
@@ -43,7 +56,7 @@ public class Channel {
      * @return Message
      */
     protected static byte[] createMessage(String... headerFields) {
-        return (String.join(" ", headerFields) + Server.CRLF + Server.CRLF).getBytes();
+        return (String.join(" ", headerFields) + " " + Server.CRLF + Server.CRLF).getBytes();
     }
 
     /**
@@ -61,5 +74,18 @@ public class Channel {
         byteArrayOutputStream.write(body, 0, body.length);
 
         return byteArrayOutputStream.toByteArray();
+    }
+
+    private void listen() {
+        byte[] buffer = new byte[Server.MAX_HEADER_SIZE + Server.CHUNK_SIZE];
+        DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+        try {
+            socket.receive(packet);
+            byte[] message = Arrays.copyOf(buffer, packet.getLength());
+            new Thread(() -> peer.processMessage(message)).start();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 }
