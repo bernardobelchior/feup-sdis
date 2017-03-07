@@ -5,7 +5,7 @@ import server.Server;
 
 import java.util.Arrays;
 
-public class BackupChannel extends Channel{
+public class BackupChannel extends Channel {
     public BackupChannel(Peer peer, String address, String port) {
         super(peer, address, port);
     }
@@ -19,15 +19,13 @@ public class BackupChannel extends Channel{
      * @param replicationDegree Minimum number of chunk replicas
      */
     public void sendChunk(String fileId, int chunkNo, int replicationDegree, byte[] chunk) {
-        String message = Server.BACKUP_INIT;
-
-        message += " " + peer.getProtocolVersion()
-                + " " + Integer.toString(peer.getServerId())
-                + " " + fileId
-                + " " + chunkNo
-                + " " + Integer.toString(replicationDegree)
-                + " " + Server.CRLF + Server.CRLF
-                + chunk;
+        byte[] message = createMessageWithBody(chunk,
+                Server.BACKUP_INIT,
+                peer.getProtocolVersion(),
+                Integer.toString(peer.getServerId()),
+                fileId,
+                Integer.toString(chunkNo),
+                Integer.toString(replicationDegree));
 
         System.out.println(message);
     }

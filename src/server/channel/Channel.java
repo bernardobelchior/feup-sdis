@@ -4,11 +4,10 @@ import common.Common;
 import server.Peer;
 import server.Server;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
-
-import static server.MessageBuilder.createMessageWithoutTerminator;
 
 public class Channel {
     protected Peer peer;
@@ -19,22 +18,6 @@ public class Channel {
         socket = createMulticastSocket(address, port);
     }
 
-    protected byte[] createMessage(String messageType, String protocolVersion, int serverId, String fileId, int chunkNo, int replicationDegree, byte[] body) {
-        //return (createMessageWithoutTerminator(messageType, protocolVersion, serverId, fileId, chunkNo, replicationDegree) + Server.CRLF + Server.CRLF).getBytes();
-        return null;
-    }
-
-    protected byte[] createMessage(String messageType, String protocolVersion, int serverId, String fileId, int chunkNo, int replicationDegree) {
-        return (createMessageWithoutTerminator(messageType, protocolVersion, serverId, fileId, chunkNo, replicationDegree) + Server.CRLF + Server.CRLF).getBytes();
-    }
-
-    protected byte[] createMessage(String messageType, String protocolVersion, int serverId, String fileId, int chunkNo) {
-        return (createMessageWithoutTerminator(messageType, protocolVersion, serverId, fileId, chunkNo) + Server.CRLF + Server.CRLF).getBytes();
-    }
-
-    protected byte[] createMessage(String messageType, String protocolVersion, int serverId, String fileId) {
-        return (createMessageWithoutTerminator(messageType, protocolVersion, serverId, fileId) + Server.CRLF + Server.CRLF).getBytes();
-    }
 
     private static MulticastSocket createMulticastSocket(String addressStr, String portStr) {
         InetAddress address = Common.parseAddress(addressStr);
@@ -49,5 +32,34 @@ public class Channel {
         }
 
         return socket;
+    }
+
+    /**
+     * Creates the message that only uses a header.
+     * Header format:
+     * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF>
+     *
+     * @param headerFields Every field of the header, in the correct sequence.
+     * @return Message
+     */
+    protected static byte[] createMessage(String... headerFields) {
+        return (String.join(" ", headerFields) + Server.CRLF + Server.CRLF).getBytes();
+    }
+
+    /**
+     * Creates a message with header and body
+     *
+     * @param body         Message body
+     * @param headerFields Header fields in sequence.
+     * @return Message
+     */
+    protected static byte[] createMessage(byte[] body, String... headerFields) {
+        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+
+        byte[] header = createMessage(headerFields);
+        byteArrayOutputStream.write(header, 0, header.length);
+        byteArrayOutputStream.write(body, 0, body.length);
+
+        return byteArrayOutputStream.toByteArray();
     }
 }
