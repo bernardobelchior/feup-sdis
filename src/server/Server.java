@@ -20,22 +20,21 @@ public class Server {
         MulticastSocket backupChannel = Server.createMulticastSocket(args[5], args[6]);
         MulticastSocket recoveryChannel = Server.createMulticastSocket(args[7], args[8]);
 
-        InitiatorPeer initiatorPeer = null;
+        Peer peer = null;
 
         try {
-            initiatorPeer = new InitiatorPeer(controlChannel, backupChannel, recoveryChannel);
+            peer = new Peer(protocolVersion, serverId, controlChannel, backupChannel, recoveryChannel);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
 
         try {
             Registry registry = LocateRegistry.getRegistry();
-            registry.bind(serviceAccessPoint, initiatorPeer);
+            registry.bind(serviceAccessPoint, peer);
         } catch (RemoteException | AlreadyBoundException e) {
             e.printStackTrace();
         }
 
-        new Peer(protocolVersion, serverId, controlChannel, backupChannel, recoveryChannel);
     }
 
     private static MulticastSocket createMulticastSocket(String addressStr, String portStr) {

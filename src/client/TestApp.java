@@ -1,6 +1,6 @@
 package client;
 
-import common.IBackupServer;
+import common.IInitiatorPeer;
 
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
@@ -9,7 +9,7 @@ import java.rmi.registry.Registry;
 
 public class TestApp {
 
-    private static IBackupServer initiatorPeer;
+    private static IInitiatorPeer initiatorPeer;
 
     public static void main(String[] args) {
 
@@ -19,7 +19,7 @@ public class TestApp {
 
         try {
             Registry registry = LocateRegistry.getRegistry("localhost");
-            initiatorPeer = (IBackupServer) registry.lookup(peerAccessPoint);
+            initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
             e.printStackTrace();
         }

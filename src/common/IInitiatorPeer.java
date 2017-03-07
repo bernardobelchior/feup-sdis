@@ -6,7 +6,7 @@ import java.rmi.RemoteException;
 /**
  * Interface to use with Remote Method Invocation
  */
-public interface IBackupServer extends Remote {
+public interface IInitiatorPeer extends Remote {
     /**
      * Backs up the file with {@filename} and have at least {@replicationDegree} copies of each chunk at any time.
      *
