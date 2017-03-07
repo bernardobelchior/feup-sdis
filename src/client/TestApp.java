@@ -13,6 +13,8 @@ public class TestApp {
 
     public static void main(String[] args) {
 
+        System.setProperty("java.net.preferIPv4Stack", "true");
+
         String peerAccessPoint = args[0];
         String operation = args[1];
         String pathName;

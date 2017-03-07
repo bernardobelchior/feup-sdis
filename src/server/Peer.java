@@ -3,10 +3,7 @@ package server;
 import common.IInitiatorPeer;
 
 import javax.xml.bind.DatatypeConverter;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
+import java.io.*;
 import java.net.MulticastSocket;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
@@ -30,6 +27,26 @@ public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
     @Override
     public void backup(String filename, int replicationDegree) throws RemoteException {
         FileInputStream inputStream;
+        BufferedReader reader = null;
+        String content;
+
+        try {
+            reader = new BufferedReader(new FileReader("/Users/mariajoaomirapaulo/Desktop/teste2.txt"));
+
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
+
+
+        try {
+            content = reader.readLine();
+            System.out.println("Content :" + content);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+
         try {
             inputStream = new FileInputStream(filename);
         } catch (FileNotFoundException e) {
@@ -46,6 +63,7 @@ public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
             int chunkNo = 0;
             while (inputStream.read(chunk) != -1) {
                 sendChunk(fileId, chunkNo, replicationDegree, chunk);
+                System.out.print("chunk: " + chunk);
                 chunkNo++;
             }
         } catch (IOException e) {
@@ -98,14 +116,14 @@ public class Peer extends UnicastRemoteObject implements IInitiatorPeer {
      * @param replicationDegree Minimum number of chunk replicas
      */
     private void sendChunk(String fileId, int chunkNo, int replicationDegree, byte[] chunk) {
-        String message = Utils.BACKUP_INIT;
+        String message = Server.BACKUP_INIT;
 
         message += " " + protocolVersion
                 + " " + Integer.toString(serverId)
                 + " " + fileId
                 + " " + chunkNo
                 + " " + Integer.toString(replicationDegree)
-                + " " + Utils.CRLF + Utils.CRLF
+                + " " + Server.CRLF + Server.CRLF
                 + chunk;
 
         System.out.println(message);

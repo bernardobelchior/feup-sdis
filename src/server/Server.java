@@ -11,7 +11,27 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 public class Server {
+    // Chunk Backup
+    public static final String BACKUP_INIT = "PUTCHUNK";
+    public static final String BACKUP_SUCCESS = "STORED";
+
+    // Chunk Restore
+    public static final String RESTORE_INIT = "GETCHUNK";
+    public static final String RESTORE_SUCCESS = "CHUNK";
+
+    // File Deletion
+    public static final String DELETE_INIT = "DELETE";
+
+    // Space Reclaiming
+    public static final String RECLAIM_INIT = "REMOVED"; //TODO: Define implementation
+    public static final String RECLAIM_SUCESS = "REMOVED";
+
+
+    public static final String CRLF = "" + (char) 0xD + (char) 0xA;
+
     public static void main(String[] args) {
+
+        System.setProperty("java.net.preferIPv4Stack", "true");
         String protocolVersion = args[0];
         int serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
