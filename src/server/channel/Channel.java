@@ -1,6 +1,7 @@
 package server.channel;
 
 import common.Common;
+import server.ChannelManager;
 import server.Peer;
 import server.Server;
 
@@ -12,15 +13,16 @@ import java.net.MulticastSocket;
 import java.util.Arrays;
 
 public class Channel {
-    protected Peer peer;
-    protected MulticastSocket socket;
+    private MulticastSocket socket;
+    private ChannelManager channelManager;
 
-    public Channel(Peer peer, String address, String port) {
-        this.peer = peer;
+    public Channel(String address, String port) {
         socket = createMulticastSocket(address, port);
-        listen();
     }
 
+    public void setManager(ChannelManager channelManager){
+        this.channelManager = channelManager;
+    }
 
     private static MulticastSocket createMulticastSocket(String addressStr, String portStr) {
         InetAddress address = Common.parseAddress(addressStr);
@@ -37,7 +39,7 @@ public class Channel {
         return socket;
     }
 
-    protected void sendMessage(byte[] message) {
+    public void sendMessage(byte[] message) {
         DatagramPacket packet = new DatagramPacket(message, message.length);
 
         try {
@@ -47,43 +49,15 @@ public class Channel {
         }
     }
 
-    /**
-     * Creates the message that only uses a header.
-     * Header format:
-     * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF>
-     *
-     * @param headerFields Every field of the header, in the correct sequence.
-     * @return Message
-     */
-    protected static byte[] createMessage(String... headerFields) {
-        return (String.join(" ", headerFields) + " " + Server.CRLF + Server.CRLF).getBytes();
-    }
 
-    /**
-     * Creates a message with header and body
-     *
-     * @param body         Message body
-     * @param headerFields Header fields in sequence.
-     * @return Message
-     */
-    protected static byte[] createMessage(byte[] body, String... headerFields) {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-
-        byte[] header = createMessage(headerFields);
-        byteArrayOutputStream.write(header, 0, header.length);
-        byteArrayOutputStream.write(body, 0, body.length);
-
-        return byteArrayOutputStream.toByteArray();
-    }
-
-    private void listen() {
+    public void listen() {
         byte[] buffer = new byte[Server.MAX_HEADER_SIZE + Server.CHUNK_SIZE];
         DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
 
         try {
             socket.receive(packet);
             byte[] message = Arrays.copyOf(buffer, packet.getLength());
-            new Thread(() -> peer.processMessage(message)).start();
+            channelManager.processMessage(message);
         } catch (IOException e) {
             e.printStackTrace();
         }

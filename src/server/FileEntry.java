@@ -21,6 +21,6 @@ public class FileEntry {
     }
 
     public void decrementCurrentReplicationDegree() {
-        currentReplicationDegree++;
+        currentReplicationDegree--;
     }
 }

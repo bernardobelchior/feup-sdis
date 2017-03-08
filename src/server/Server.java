@@ -1,8 +1,7 @@
 package server;
 
-import server.channel.BackupChannel;
-import server.channel.ControlChannel;
-import server.channel.RecoveryChannel;
+import server.channel.Channel;
+import server.channel.ChannelManager;
 
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
@@ -44,14 +43,16 @@ public class Server {
 
         Peer peer = new Peer(protocolVersion, serverId);
 
-        ControlChannel controlChannel = new ControlChannel(peer, args[3], args[4]);
-        BackupChannel backupChannel = new BackupChannel(peer, args[5], args[6]);
-        RecoveryChannel recoveryChannel = new RecoveryChannel(peer, args[7], args[8]);
+        Channel controlChannel = new Channel (args[3], args[4]);
+        Channel backupChannel = new Channel(args[5], args[6]);
+        Channel recoveryChannel = new Channel(args[7], args[8]);
+
+        ChannelManager channelManager = new ChannelManager(peer,controlChannel,backupChannel,recoveryChannel);
 
         InitiatorPeer initiatorPeer = null;
 
         try {
-            initiatorPeer = new InitiatorPeer(controlChannel, backupChannel, recoveryChannel);
+            initiatorPeer = new InitiatorPeer(channelManager);
         } catch (RemoteException e) {
             e.printStackTrace();
         }

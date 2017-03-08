@@ -1,9 +1,7 @@
 package server;
 
 import common.IInitiatorPeer;
-import server.channel.BackupChannel;
-import server.channel.ControlChannel;
-import server.channel.RecoveryChannel;
+import server.channel.ChannelManager;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
@@ -17,14 +15,11 @@ import java.rmi.server.UnicastRemoteObject;
  * Created by bernardo on 3/7/17.
  */
 public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer {
-    private final ControlChannel controlChannel;
-    private final BackupChannel backupChannel;
-    private final RecoveryChannel recoveryChannel;
 
-    protected InitiatorPeer(ControlChannel controlChannel, BackupChannel backupChannel, RecoveryChannel recoveryChannel) throws RemoteException {
-        this.controlChannel = controlChannel;
-        this.backupChannel = backupChannel;
-        this.recoveryChannel = recoveryChannel;
+    private ChannelManager channelManager;
+
+    protected InitiatorPeer(ChannelManager channelManager) throws RemoteException {
+        this.channelManager = channelManager;
     }
 
     @Override
@@ -46,8 +41,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
             int chunkNo = 0;
             int bytesRead;
             while ((bytesRead = inputStream.read(chunk)) != -1) {
-                int currentChunkNo = chunkNo;
-                new Thread(() -> backupChannel.sendChunk(fileId, currentChunkNo, replicationDegree, chunk, bytesRead)).start();
+                channelManager.sendChunk(fileId, chunkNo, replicationDegree, chunk, bytesRead);
                 chunkNo++;
             }
         } catch (IOException e) {
