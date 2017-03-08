@@ -1,21 +1,17 @@
 package server.channel;
 
-import server.Peer;
-import server.Server;
-import server.channel.Channel;
+import server.*;
+import server.MessageBuilder;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Arrays;
 
 import static server.Server.*;
 
-/**
- * Created by mariajoaomirapaulo on 08/03/17.
- */
 public class ChannelManager {
 
     private Peer peer;
@@ -24,6 +20,7 @@ public class ChannelManager {
     private Channel recoveryChannel;
 
     public ChannelManager(Peer peer, Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
+        this.peer = peer;
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
@@ -36,6 +33,7 @@ public class ChannelManager {
         this.backupChannel.listen();
         this.recoveryChannel.listen();
     }
+
     /**
      * Sends the specified chunk with number {@chunkNo} of file {@fileId}.
      * Also specifies a replication degree of {@replicationDegree}.
@@ -53,7 +51,7 @@ public class ChannelManager {
                 effectiveChunk = Arrays.copyOf(chunk, size);
 
             do {
-                byte[] message = createMessage(effectiveChunk,
+                byte[] message = MessageBuilder.createMessage(effectiveChunk,
                         Server.BACKUP_INIT,
                         peer.getProtocolVersion(),
                         Integer.toString(peer.getServerId()),
@@ -70,34 +68,6 @@ public class ChannelManager {
                 }
             } while (peer.getCurrentReplicationDegree(fileId) < peer.getDesiredReplicationDegree(fileId));
         }).start();
-    }
-
-    /**
-     * Creates the message that only uses a header.
-     * Header format:
-     * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF>
-     *
-     * @param headerFields Every field of the header, in the correct sequence.
-     * @return Message
-     */
-    protected static byte[] createMessage(String... headerFields) {
-        return (String.join(" ", headerFields) + " " + Server.CRLF + Server.CRLF).getBytes();
-    }
-
-    /**
-     * Creates a message with header and body
-     *
-     * @param body         Message body
-     * @param headerFields Header fields in sequence.
-     * @return Message
-     */
-    protected static byte[] createMessage(byte[] body, String... headerFields) {
-        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-
-        byte[] header = createMessage(headerFields);
-        byteArrayOutputStream.write(header, 0, header.length);
-        byteArrayOutputStream.write(body, 0, body.length);
-        return byteArrayOutputStream.toByteArray();
     }
 
     public void processMessage(byte[] message) {
@@ -126,48 +96,52 @@ public class ChannelManager {
 
             String[] headerFields = header.split(" ");
 
-            processHeader(headerFields, byteArrayInputStream);
-
-        /*
-        * Now we are:
-        * - At the end of message if it only has a header
-        * - In the body if it has one
-         */
-
-        /*if (byteArrayInputStream.available() != 0) { //If there is something to read
-            byte[] body = new byte[CHUNK_SIZE];
-            byteArrayInputStream.read(body, 0, body.length);
-
-        }*/
-
+            try {
+                processHeader(headerFields, byteArrayInputStream);
+            } catch (InvalidHeaderException | IOException e) {
+                System.err.println(e.toString());
+                e.printStackTrace();
+                return;
+            }
         }).start();
     }
 
     /**
      * Processes the header. Receives a {@link ByteArrayInputStream} for future parsing, if needed.
      * Header format:
+     * Index: 0          1          2        3         4            5
      * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF>
      *
      * @param headerFields         Array of header fields.
      * @param byteArrayInputStream {@link ByteArrayInputStream} that contains the rest of the message.
      */
-    private void processHeader(String[] headerFields, ByteArrayInputStream byteArrayInputStream) {
-        for (String field : headerFields)
+    private void processHeader(String[] headerFields, ByteArrayInputStream byteArrayInputStream) throws InvalidHeaderException, IOException {
+        for (String field : headerFields) //TODO: Delete. For debug only
             System.out.print(field + " ");
         System.out.println();
 
-        //TODO: Missing error checking
+        if (headerFields.length < 3)
+            throw new InvalidHeaderException("A valid message header requires at least 3 fields.");
 
         switch (headerFields[0]) {
             case BACKUP_INIT:
-                try {
-                    Files.copy(byteArrayInputStream, new File(headerFields[3]).toPath());
-                    //TODO: ChunkNo to File Id
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
+                if (headerFields.length != 5)
+                    throw new InvalidHeaderException("A chunk backup header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                //How to send reply??
+                Utils.checkFileIdValidity(headerFields[3]);
+                int chunkNo = Utils.parseChunkNo(headerFields[4]);
+                int replicationDegree = Utils.parseReplicationDegree(headerFields[5]);
+
+                Files.copy(byteArrayInputStream, getFilePath(headerFields[3], headerFields[4]));
+                peer.addFile(headerFields[3], chunkNo, replicationDegree);
+
+                controlChannel.sendMessage(
+                        MessageBuilder.createMessage(
+                                Server.BACKUP_SUCCESS,
+                                Integer.toString(peer.getServerId()),
+                                headerFields[3],
+                                headerFields[4],
+                                Server.CRLF, Server.CRLF));
                 break;
             case BACKUP_SUCCESS:
 
@@ -186,7 +160,13 @@ public class ChannelManager {
             case RECLAIM_SUCESS:
 
                 break;
+            default:
+                throw new InvalidHeaderException("Unknown header message type " + headerFields[0]);
         }
     }
 
+    private static Path getFilePath(String fileId, String chunkNo) {
+        return new File(fileId).toPath(); //TODO: Add ChunkNo
+        //return new File(fileId + chunkNo).toPath();
+    }
 }

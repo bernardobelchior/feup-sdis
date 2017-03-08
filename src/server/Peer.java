@@ -1,14 +1,6 @@
 package server;
 
-import javafx.scene.shape.Path;
-
-import java.io.*;
-import java.nio.file.CopyOption;
-import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.util.HashMap;
-
-import static server.Server.*;
 
 public class Peer {
     private final String protocolVersion;
@@ -20,7 +12,7 @@ public class Peer {
         this.serverId = serverId;
     }
 
-    public void addFile(String fileId, int desiredReplicationDegree) {
+    public void addFile(String fileId, int chunkNo, int desiredReplicationDegree) { //TODO: How to store files in the filesystem and hashmap?
         fileEntryMap.put(fileId, new FileEntry(desiredReplicationDegree));
     }
 
