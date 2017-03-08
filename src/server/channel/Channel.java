@@ -1,11 +1,8 @@
 package server.channel;
 
 import common.Common;
-import server.ChannelManager;
-import server.Peer;
 import server.Server;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;

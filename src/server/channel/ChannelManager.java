@@ -1,5 +1,7 @@
-package server;
+package server.channel;
 
+import server.Peer;
+import server.Server;
 import server.channel.Channel;
 
 import java.io.ByteArrayInputStream;
