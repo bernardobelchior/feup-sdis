@@ -12,8 +12,8 @@ public class Peer {
         this.serverId = serverId;
     }
 
-    public void addFile(String fileId, int chunkNo, int desiredReplicationDegree) { //TODO: How to store files in the filesystem and hashmap?
-        fileEntryMap.put(fileId, new FileEntry(desiredReplicationDegree));
+    public void addFile(String fileId, int chunkNo, int desiredReplicationDegree) {
+        fileEntryMap.put(createKey(fileId, chunkNo), new FileEntry(desiredReplicationDegree));
     }
 
     public String getProtocolVersion() {
@@ -24,17 +24,24 @@ public class Peer {
         return serverId;
     }
 
-    public int getCurrentReplicationDegree(String fileId) {
-        return fileEntryMap.get(fileId).getCurrentReplicationDegree();
+    public int getCurrentReplicationDegree(String fileId, int chunkNo) {
+        return fileEntryMap.get(createKey(fileId, chunkNo)).getCurrentReplicationDegree();
     }
 
-    public int getDesiredReplicationDegree(String fileId) {
-        return fileEntryMap.get(fileId).getDesiredReplicationDegree();
+    public int getDesiredReplicationDegree(String fileId, int chunkNo) {
+        return fileEntryMap.get(createKey(fileId, chunkNo)).getDesiredReplicationDegree();
     }
 
-    public void incrementCurrentReplicationDegree(String fileId) {
-        fileEntryMap.get(fileId).incrementCurrentReplicationDegree();
+    public void incrementCurrentReplicationDegree(String fileId, int chunkNo) {
+        fileEntryMap.get(createKey(fileId, chunkNo)).incrementCurrentReplicationDegree();
     }
 
+    public void decrementCurrentReplicationDegree(String fileId, int chunkNo) {
+        fileEntryMap.get(createKey(fileId, chunkNo)).decrementCurrentReplicationDegree();
+    }
+
+    private String createKey(String fileId, int chunkNo) {
+        return fileId + chunkNo;
+    }
 }
 

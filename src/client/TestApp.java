@@ -24,6 +24,7 @@ public class TestApp {
             initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
             e.printStackTrace();
+            System.exit(1);
         }
 
         switch (operation) {

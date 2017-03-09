@@ -11,14 +11,11 @@ import java.io.IOException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
-/**
- * Created by bernardo on 3/7/17.
- */
 public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer {
 
     private ChannelManager channelManager;
 
-    protected InitiatorPeer(ChannelManager channelManager) throws RemoteException {
+    public InitiatorPeer(ChannelManager channelManager) throws RemoteException {
         this.channelManager = channelManager;
     }
 

@@ -6,6 +6,7 @@ import server.channel.ChannelManager;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 
 public class Server {
     /* All time-related constants are in milliseconds */
@@ -27,7 +28,9 @@ public class Server {
     public static final String RECLAIM_SUCESS = "REMOVED";
 
 
-    public static final String CRLF = "" + (char) 0xD + (char) 0xA;
+    public static final byte CR = 0xD;
+    public static final byte LF = 0xA;
+    public static final String CRLF = "" + (char) CR + (char) LF;
 
     /* Sizes in bytes */
     public static final int MAX_HEADER_SIZE = 512;
@@ -43,11 +46,11 @@ public class Server {
 
         Peer peer = new Peer(protocolVersion, serverId);
 
-        Channel controlChannel = new Channel (args[3], args[4]);
+        Channel controlChannel = new Channel(args[3], args[4]);
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
 
-        ChannelManager channelManager = new ChannelManager(peer,controlChannel,backupChannel,recoveryChannel);
+        ChannelManager channelManager = new ChannelManager(peer, controlChannel, backupChannel, recoveryChannel);
 
         InitiatorPeer initiatorPeer = null;
 
@@ -58,7 +61,8 @@ public class Server {
         }
 
         try {
-            LocateRegistry.getRegistry().bind(serviceAccessPoint, initiatorPeer);
+            Registry registry = LocateRegistry.getRegistry();
+            registry.bind(serviceAccessPoint, initiatorPeer);
         } catch (RemoteException | AlreadyBoundException e) {
             e.printStackTrace();
         }
