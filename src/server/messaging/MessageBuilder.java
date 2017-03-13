@@ -1,4 +1,6 @@
-package server;
+package server.messaging;
+
+import server.Server;
 
 import java.io.ByteArrayOutputStream;
 
@@ -7,7 +9,7 @@ import java.io.ByteArrayOutputStream;
  */
 public class MessageBuilder {
     /**
-     * Creates the message that only uses a header.
+     * Creates the messaging that only uses a header.
      * Header format:
      * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF><CRLF>
      *
@@ -19,7 +21,7 @@ public class MessageBuilder {
     }
 
     /**
-     * Creates a message with header and body
+     * Creates a messaging with header and body
      *
      * @param body         Message body
      * @param headerFields Header fields in sequence.

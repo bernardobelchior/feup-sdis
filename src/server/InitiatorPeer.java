@@ -1,7 +1,8 @@
 package server;
 
 import common.IInitiatorPeer;
-import server.channel.ChannelManager;
+import server.protocol.BackupFile;
+import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
@@ -10,21 +11,21 @@ import java.rmi.server.UnicastRemoteObject;
 
 public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer {
 
-    private ChannelManager channelManager;
+    private Controller controller;
 
-    public InitiatorPeer(ChannelManager channelManager) throws RemoteException {
-        this.channelManager = channelManager;
+    public InitiatorPeer(Controller controller) throws RemoteException {
+        this.controller = controller;
     }
 
     @Override
     public void backup(String filename, int replicationDegree) throws RemoteException {
-        channelManager.startFileBackup(new FileBackupSystem(filename, replicationDegree));
+        controller.startFileBackup(new BackupFile(filename, replicationDegree));
     }
 
     @Override
     public void restore(String filename) throws RemoteException {
         String fileId = generateFileId(filename);
-        channelManager.startFileRecovery(new FileRecoverySystem(filename, fileId));
+        controller.startFileRecovery(new RecoverFile(filename, fileId));
     }
 
     @Override

@@ -1,17 +1,17 @@
-package server.channel;
+package server.messaging;
 
 import common.Common;
+import server.Controller;
 import server.Server;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
-import java.util.Arrays;
 
 public class Channel {
     private MulticastSocket socket;
-    private ChannelManager channelManager;
+    private Controller controller;
     private InetAddress address;
     private int port;
 
@@ -19,8 +19,8 @@ public class Channel {
         socket = createMulticastSocket(address, port);
     }
 
-    public void setManager(ChannelManager channelManager) {
-        this.channelManager = channelManager;
+    public void setController(Controller controller) {
+        this.controller = controller;
     }
 
     private MulticastSocket createMulticastSocket(String addressStr, String portStr) {
@@ -59,8 +59,7 @@ public class Channel {
 
                 try {
                     socket.receive(packet);
-                    byte[] message = Arrays.copyOf(buffer, packet.getLength());
-                    channelManager.processMessage(message);
+                    controller.processMessage(packet.getData());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

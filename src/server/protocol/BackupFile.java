@@ -1,6 +1,9 @@
-package server;
+package server.protocol;
 
-import server.channel.ChannelManager;
+import server.Server;
+import server.Utils;
+import server.Controller;
+import server.messaging.MessageBuilder;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
@@ -12,24 +15,24 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static server.Server.*;
 
-public class FileBackupSystem {
+public class BackupFile {
     private final String filename;
     private final int desiredReplicationDegree;
     private final String fileId;
     private final File file;
     private ConcurrentHashMap<Integer, Integer> chunksReplicationDegree;
 
-    private ChannelManager channelManager;
+    private Controller controller;
 
-    FileBackupSystem(String filename, int desiredReplicationDegree) {
+    BackupFile(String filename, int desiredReplicationDegree) {
         this.filename = filename;
         this.desiredReplicationDegree = desiredReplicationDegree;
         file = new File(filename);
         fileId = generateFileId();
     }
 
-    public void start(ChannelManager channelManager, ConcurrentHashMap<Integer, Integer> chunksReplicationDegree) {
-        this.channelManager = channelManager;
+    public void start(Controller controller, ConcurrentHashMap<Integer, Integer> chunksReplicationDegree) {
+        this.controller = controller;
         this.chunksReplicationDegree = chunksReplicationDegree;
 
         FileInputStream inputStream;
@@ -72,7 +75,7 @@ public class FileBackupSystem {
                         Integer.toString(chunkNo),
                         Integer.toString(desiredReplicationDegree));
 
-                channelManager.sendToBackupChannel(message);
+                controller.sendToBackupChannel(message);
 
                 try {
                     Thread.sleep(Server.BACKUP_TIMEOUT * 2 ^ attempts);

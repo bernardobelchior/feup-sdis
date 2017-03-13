@@ -1,7 +1,6 @@
 package server;
 
-import server.channel.Channel;
-import server.channel.ChannelManager;
+import server.messaging.Channel;
 
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
@@ -54,12 +53,12 @@ public class Server {
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
 
-        ChannelManager channelManager = new ChannelManager(controlChannel, backupChannel, recoveryChannel);
+        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel);
 
         InitiatorPeer initiatorPeer = null;
 
         try {
-            initiatorPeer = new InitiatorPeer(channelManager);
+            initiatorPeer = new InitiatorPeer(controller);
         } catch (RemoteException e) {
             e.printStackTrace();
         }
