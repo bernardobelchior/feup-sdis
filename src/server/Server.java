@@ -14,6 +14,7 @@ public class Server {
     public static final String BACKUP_INIT = "PUTCHUNK";
     public static final String BACKUP_SUCCESS = "STORED";
     public static final int BACKUP_TIMEOUT = 1000;
+    public static final int MAX_BACKUP_ATTEMPTS = 5;
     public static final int BACKUP_REPLY_DELAY = 400;
 
     // Chunk Restore
@@ -38,21 +39,22 @@ public class Server {
     public static final int MAX_HEADER_SIZE = 512;
     public static final int CHUNK_SIZE = 64 * 1000;
 
+    private static String protocolVersion;
+    private static int serverId;
+
     public static void main(String[] args) {
         /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
 
-        String protocolVersion = args[0];
-        int serverId = Integer.parseInt(args[1]);
+        protocolVersion = args[0];
+        serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
-
-        Peer peer = new Peer(protocolVersion, serverId);
 
         Channel controlChannel = new Channel(args[3], args[4]);
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
 
-        ChannelManager channelManager = new ChannelManager(peer, controlChannel, backupChannel, recoveryChannel);
+        ChannelManager channelManager = new ChannelManager(controlChannel, backupChannel, recoveryChannel);
 
         InitiatorPeer initiatorPeer = null;
 
@@ -68,6 +70,13 @@ public class Server {
         } catch (RemoteException | AlreadyBoundException e) {
             e.printStackTrace();
         }
+    }
 
+    public static String getProtocolVersion() {
+        return protocolVersion;
+    }
+
+    public static int getServerId() {
+        return serverId;
     }
 }

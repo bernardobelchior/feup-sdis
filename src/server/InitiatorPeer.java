@@ -5,9 +5,6 @@ import server.channel.ChannelManager;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
@@ -21,37 +18,13 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
 
     @Override
     public void backup(String filename, int replicationDegree) throws RemoteException {
-        FileInputStream inputStream;
-
-        try {
-            inputStream = new FileInputStream(filename);
-        } catch (FileNotFoundException e) {
-            System.err.println("File " + filename + " not found.");
-            e.printStackTrace();
-            return;
-        }
-
-        String fileId = generateFileId(filename);
-        byte[] chunk = new byte[Server.CHUNK_SIZE];
-
-        try {
-            int chunkNo = 0;
-            int bytesRead;
-            while ((bytesRead = inputStream.read(chunk)) != -1) {
-                channelManager.sendChunk(fileId, chunkNo, replicationDegree, chunk, bytesRead);
-                chunkNo++;
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        channelManager.startFileBackup(new FileBackupSystem(filename, replicationDegree));
     }
 
     @Override
     public void restore(String filename) throws RemoteException {
-        int chunkNo = 0;
         String fileId = generateFileId(filename);
-        channelManager.getChunk(fileId, chunkNo);
-        System.out.println("Restore");
+        channelManager.startFileRecovery(new FileRecoverySystem(filename, fileId));
     }
 
     @Override

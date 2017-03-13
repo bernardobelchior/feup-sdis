@@ -8,19 +8,20 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.Arrays;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static server.Server.*;
 
 public class ChannelManager {
 
-    private Peer peer;
-    private Channel controlChannel;
-    private Channel backupChannel;
-    private Channel recoveryChannel;
+    private final Channel controlChannel;
+    private final Channel backupChannel;
+    private final Channel recoveryChannel;
+    private final ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> fileChunkMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Integer> desiredReplicationDegreesMap = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, FileRecoverySystem> ongoingRecoveries = new ConcurrentHashMap<>();
 
-    public ChannelManager(Peer peer, Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
-        this.peer = peer;
+    public ChannelManager(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
@@ -34,51 +35,12 @@ public class ChannelManager {
         this.recoveryChannel.listen();
     }
 
-    /**
-     * Sends the specified chunk with number {@chunkNo} of file {@fileId}.
-     * Also specifies a replication degree of {@replicationDegree}.
-     * Should be started as a separated Thread.
-     *
-     * @param fileId            File Identifier
-     * @param chunkNo           Chunk number in file
-     * @param replicationDegree Minimum number of chunk replicas
-     */
-    public void sendChunk(String fileId, int chunkNo, int replicationDegree, byte[] chunk, int size) {
-        new Thread(() -> {
-            peer.addFile(fileId, chunkNo, replicationDegree);
-            byte[] effectiveChunk = chunk;
-
-            if (size != Server.CHUNK_SIZE)
-                effectiveChunk = Arrays.copyOf(chunk, size);
-
-            do {
-                byte[] message = MessageBuilder.createMessage(effectiveChunk,
-                        Server.BACKUP_INIT,
-                        peer.getProtocolVersion(),
-                        Integer.toString(peer.getServerId()),
-                        fileId,
-                        Integer.toString(chunkNo),
-                        Integer.toString(replicationDegree));
-
-                backupChannel.sendMessage(message);
-
-                try {
-                    Thread.sleep(Server.BACKUP_TIMEOUT);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-            while (peer.getCurrentReplicationDegree(fileId, chunkNo) < peer.getDesiredReplicationDegree(fileId, chunkNo));
-        }).start();
+    public void sendToBackupChannel(byte[] message) {
+        backupChannel.sendMessage(message);
     }
 
-
-    public void getChunk(String fileId, int chunkNo) {
-        new Thread(() -> {
-            byte[] message = MessageBuilder.createMessage(Server.RESTORE_INIT, peer.getProtocolVersion(), Integer.toString(peer.getServerId()), fileId, Integer.toString(chunkNo));
-            recoveryChannel.sendMessage(message);
-
-        }).start();
+    public void sendToRecoveryChannel(byte[] message) {
+        recoveryChannel.sendMessage(message);
     }
 
     public void processMessage(byte[] message) {
@@ -109,9 +71,6 @@ public class ChannelManager {
                 if (headerFields.length < 3)
                     throw new InvalidHeaderException("A valid message header requires at least 3 fields.");
 
-                if (headerFields[2].equals(Integer.toString(peer.getServerId())))
-                    return;
-
                 processHeader(headerFields, byteArrayInputStream);
             } catch (InvalidHeaderException | IOException e) {
                 System.err.println(e.toString());
@@ -119,6 +78,37 @@ public class ChannelManager {
                 return;
             }
         }).start();
+    }
+
+    private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, String senderId, String fileId, String chunkNoStr, String replicationDegreeStr) throws InvalidHeaderException, IOException {
+        if (Integer.parseInt(senderId) == getServerId()) // Same sender
+            return;
+
+        Utils.checkFileIdValidity(fileId);
+        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+        int desiredReplicationDegree = Utils.parseReplicationDegree(replicationDegreeStr);
+
+        desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
+
+        if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) > desiredReplicationDegree)
+            return;
+
+        Files.copy(byteArrayInputStream, getFilePath(fileId, chunkNo), StandardCopyOption.REPLACE_EXISTING);
+        incrementReplicationDegree(fileId, chunkNo);
+
+        controlChannel.sendMessage(
+                MessageBuilder.createMessage(
+                        Server.BACKUP_SUCCESS,
+                        getProtocolVersion(),
+                        Integer.toString(getServerId()),
+                        fileId,
+                        chunkNoStr));
+    }
+
+    private void processStoredMessage(String fileId, String chunkNoStr) throws InvalidHeaderException {
+        Utils.checkFileIdValidity(fileId);
+        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+        incrementReplicationDegree(fileId, chunkNo);
     }
 
     /**
@@ -136,29 +126,13 @@ public class ChannelManager {
                 if (headerFields.length != 6)
                     throw new InvalidHeaderException("A chunk backup header must have exactly 6 fields. Received " + headerFields.length + ".");
 
-                Utils.checkFileIdValidity(headerFields[3]);
-                int chunkNo = Utils.parseChunkNo(headerFields[4]);
-                int replicationDegree = Utils.parseReplicationDegree(headerFields[5]);
-
-                Files.copy(byteArrayInputStream, getFilePath(headerFields[3], chunkNo), StandardCopyOption.REPLACE_EXISTING);
-                peer.addFile(headerFields[3], chunkNo, replicationDegree);
-
-                controlChannel.sendMessage(
-                        MessageBuilder.createMessage(
-                                Server.BACKUP_SUCCESS,
-                                peer.getProtocolVersion(),
-                                Integer.toString(peer.getServerId()),
-                                headerFields[3],
-                                headerFields[4]));
+                processBackupMessage(byteArrayInputStream, headerFields[2], headerFields[3], headerFields[4], headerFields[5]);
                 break;
             case BACKUP_SUCCESS:
                 if (headerFields.length != 5)
-                    throw new InvalidHeaderException("A chunk backup header must have exactly 5 fields. Received " + headerFields.length + ".");
+                    throw new InvalidHeaderException("A chunk stored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                Utils.checkFileIdValidity(headerFields[3]);
-                chunkNo = Utils.parseChunkNo(headerFields[4]);
-
-                peer.incrementCurrentReplicationDegree(headerFields[3], chunkNo);
+                processStoredMessage(headerFields[3], headerFields[4]);
                 break;
             case RESTORE_INIT:
 
@@ -179,8 +153,15 @@ public class ChannelManager {
         }
     }
 
+    private void incrementReplicationDegree(String fileId, int chunkNo) {
+        fileChunkMap.putIfAbsent(fileId, new ConcurrentHashMap<>());
+
+        ConcurrentHashMap<Integer, Integer> chunks = fileChunkMap.get(fileId);
+        chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
+    }
+
     private Path getFilePath(String fileId, int chunkNo) {
-        File file = new File(peer.getServerId() + "/" + fileId + chunkNo);
+        File file = new File(getServerId() + "/" + fileId + chunkNo);
 
         try {
             file.mkdirs();
@@ -190,5 +171,20 @@ public class ChannelManager {
         }
 
         return file.toPath();
+    }
+
+    public void startFileBackup(FileBackupSystem fileBackupSystem) {
+        ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
+        fileChunkMap.put(fileBackupSystem.getFileId(), chunksReplicationDegree);
+        fileBackupSystem.start(this, chunksReplicationDegree);
+    }
+
+    public void startFileRecovery(FileRecoverySystem fileRecoverySystem) {
+        ongoingRecoveries.put(fileRecoverySystem.getFileId(), fileRecoverySystem);
+        fileRecoverySystem.start(this);
+    }
+
+    public int getNumChunks(String fileId) {
+        return fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).size();
     }
 }
