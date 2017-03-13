@@ -19,6 +19,8 @@ public class Server {
     // Chunk Restore
     public static final String RESTORE_INIT = "GETCHUNK";
     public static final String RESTORE_SUCCESS = "CHUNK";
+    public static final int RESTORE_TIMEOUT = 400;
+
 
     // File Deletion
     public static final String DELETE_INIT = "DELETE";
@@ -34,7 +36,7 @@ public class Server {
 
     /* Sizes in bytes */
     public static final int MAX_HEADER_SIZE = 512;
-    public static final int CHUNK_SIZE = 64 * 1024;
+    public static final int CHUNK_SIZE = 64 * 1000;
 
     public static void main(String[] args) {
         /* Needed for Mac OS X */

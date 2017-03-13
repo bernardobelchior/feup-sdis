@@ -48,6 +48,9 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
 
     @Override
     public void restore(String filename) throws RemoteException {
+        int chunkNo = 0;
+        String fileId = generateFileId(filename);
+        channelManager.getChunk(fileId, chunkNo);
         System.out.println("Restore");
     }
 

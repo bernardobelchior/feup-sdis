@@ -1,7 +1,7 @@
 package server;
 
 public class FileEntry {
-    private int desiredReplicationDegree;
+    private final int desiredReplicationDegree;
     private int currentReplicationDegree = 0;
 
     public FileEntry(int desiredReplicationDegree) {
@@ -12,15 +12,15 @@ public class FileEntry {
         return desiredReplicationDegree;
     }
 
-    public int getCurrentReplicationDegree() {
+    public synchronized int getCurrentReplicationDegree() {
         return currentReplicationDegree;
     }
 
-    public void incrementCurrentReplicationDegree() {
+    public synchronized void incrementCurrentReplicationDegree() {
         currentReplicationDegree++;
     }
 
-    public void decrementCurrentReplicationDegree() {
+    public synchronized void decrementCurrentReplicationDegree() {
         currentReplicationDegree--;
     }
 }

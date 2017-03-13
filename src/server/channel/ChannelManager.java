@@ -72,6 +72,15 @@ public class ChannelManager {
         }).start();
     }
 
+
+    public void getChunk(String fileId, int chunkNo) {
+        new Thread(() -> {
+            byte[] message = MessageBuilder.createMessage(Server.RESTORE_INIT, peer.getProtocolVersion(), Integer.toString(peer.getServerId()), fileId, Integer.toString(chunkNo));
+            recoveryChannel.sendMessage(message);
+
+        }).start();
+    }
+
     public void processMessage(byte[] message) {
         new Thread(() -> {
             ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message);

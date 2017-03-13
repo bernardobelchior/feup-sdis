@@ -9,7 +9,7 @@ public class MessageBuilder {
     /**
      * Creates the message that only uses a header.
      * Header format:
-     * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF>
+     * <MessageType> <Version> <SenderId> <FileId> <ChunkNo> <ReplicationDeg> <CRLF><CRLF>
      *
      * @param headerFields Every field of the header, in the correct sequence.
      * @return Message
