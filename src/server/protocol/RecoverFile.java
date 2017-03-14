@@ -24,9 +24,15 @@ public class RecoverFile {
     }
 
 
-    public void start(Controller controller) {
+    public void start(Controller controller) throws FileNotFoundException {
         this.controller = controller;
+
+        /* If numChunks == 0, then the file is not backed up in the network */
         numChunks = controller.getNumChunks(fileId);
+
+        if (numChunks == 0)
+            throw new FileNotFoundException("File not found in the network.");
+
         receivedChunks = new ConcurrentHashMap<>(numChunks);
 
         for (int chunkNo = 0; chunkNo < numChunks; chunkNo++)  /* TODO: Afterwards, do not ask for all chunks at once.*/
@@ -36,7 +42,16 @@ public class RecoverFile {
     private void requestChunk(int chunkNo) {
         new Thread(() -> {
             byte[] message = MessageBuilder.createMessage(Server.RESTORE_INIT, getProtocolVersion(), Integer.toString(getServerId()), fileId, Integer.toString(chunkNo));
-            controller.sendToRecoveryChannel(message);
+            do {
+                controller.sendToRecoveryChannel(message);
+                try {
+                    Thread.sleep(RESTORE_REPLY_DELAY);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
+            }
+            while (receivedChunks.get(chunkNo) == null);
+
         }).start();
     }
 
@@ -59,7 +74,11 @@ public class RecoverFile {
 
             for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++)
                 try {
-                    fileOutputStream.write(receivedChunks.get(chunkNo), chunkNo * CHUNK_SIZE, receivedChunks.get(chunkNo).length);
+                    System.out.println(chunkNo);
+                    String temp = new String(receivedChunks.get(chunkNo).toString());
+                    System.out.println(temp); //nao da erro
+                    System.out.println(receivedChunks.get(chunkNo).length); //nao da erro
+                    fileOutputStream.write(receivedChunks.get(chunkNo), chunkNo*CHUNK_SIZE, receivedChunks.get(chunkNo).length - chunkNo*CHUNK_SIZE);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

@@ -6,6 +6,7 @@ import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
@@ -25,7 +26,13 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
     @Override
     public void restore(String filename) throws RemoteException {
         String fileId = generateFileId(filename);
-        controller.startFileRecovery(new RecoverFile(filename, fileId));
+
+        try {
+            controller.startFileRecovery(new RecoverFile(filename, fileId));
+        } catch (FileNotFoundException e) {
+            System.err.println(e.toString());
+            e.printStackTrace();
+        }
     }
 
     @Override

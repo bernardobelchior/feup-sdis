@@ -5,9 +5,7 @@ import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
 import server.protocol.RecoverFile;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -70,10 +68,16 @@ public class Controller {
                         processStoredMessage(headerFields[3], headerFields[4]);
                         break;
                     case RESTORE_INIT:
+                        if(headerFields.length != 5)
+                            throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
+                        processGetChunkMessage(headerFields[3], headerFields[4]);
                         break;
                     case RESTORE_SUCCESS:
+                        if(headerFields.length != 5)
+                            throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
+                        processRestoredMessage(byteArrayInputStream,headerFields[3],headerFields[4]);
                         break;
                     case DELETE_INIT:
 
@@ -124,6 +128,39 @@ public class Controller {
         incrementReplicationDegree(fileId, chunkNo);
     }
 
+    private void processGetChunkMessage(String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
+        Utils.checkFileIdValidity(fileId);
+        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+
+        if(ongoingRecoveries.get(fileId)!=null)
+            return;
+
+        byte[] chunkBody = Files.readAllBytes(getFilePath(fileId,chunkNo));
+
+        controlChannel.sendMessage(MessageBuilder.createMessage(
+                chunkBody,
+                Server.RESTORE_SUCCESS,
+                getProtocolVersion(),
+                Integer.toString(getServerId()),
+                fileId,
+                chunkNoStr));
+    }
+
+    private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
+        RecoverFile recover;
+        Utils.checkFileIdValidity(fileId);
+        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+
+        byte[] chunkBody = new byte[byteArrayInputStream.available()];
+        byteArrayInputStream.read(chunkBody, 0, chunkBody.length);
+
+        if((recover = ongoingRecoveries.get(fileId))!=null)
+            recover.putChunk(chunkNo,chunkBody);
+        else System.out.println("error");
+
+        //ongoingRecoveries.get(fileId).putChunk(chunkNo,chunkBody);
+    }
+
 
     private void incrementReplicationDegree(String fileId, int chunkNo) {
         fileChunkMap.putIfAbsent(fileId, new ConcurrentHashMap<>());
@@ -133,7 +170,7 @@ public class Controller {
     }
 
     private Path getFilePath(String fileId, int chunkNo) {
-        File file = new File(getServerId() + "/" + fileId + chunkNo);
+        File file = new File(getServerId() + "/" + fileId + chunkNo + ".bak");
 
         try {
             file.mkdirs();
@@ -151,12 +188,14 @@ public class Controller {
         backupFile.start(this, chunksReplicationDegree);
     }
 
-    public void startFileRecovery(RecoverFile recoverFile) {
+    public void startFileRecovery(RecoverFile recoverFile) throws FileNotFoundException {
         ongoingRecoveries.put(recoverFile.getFileId(), recoverFile);
         recoverFile.start(this);
     }
 
     public int getNumChunks(String fileId) {
-        return fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).size();
+        ConcurrentHashMap<Integer, Integer> chunkMap = fileChunkMap.get(fileId);
+
+        return chunkMap == null ? 0 : chunkMap.size();
     }
 }

@@ -19,7 +19,8 @@ public class Server {
     // Chunk Restore
     public static final String RESTORE_INIT = "GETCHUNK";
     public static final String RESTORE_SUCCESS = "CHUNK";
-    public static final int RESTORE_TIMEOUT = 400;
+    public static final int RESTORE_TIMEOUT = 1000;
+    public static final int RESTORE_REPLY_DELAY = 400;
 
 
     // File Deletion
