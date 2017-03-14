@@ -156,9 +156,6 @@ public class Controller {
 
         if((recover = ongoingRecoveries.get(fileId))!=null)
             recover.putChunk(chunkNo,chunkBody);
-        else System.out.println("error");
-
-        //ongoingRecoveries.get(fileId).putChunk(chunkNo,chunkBody);
     }
 
 
@@ -170,7 +167,7 @@ public class Controller {
     }
 
     private Path getFilePath(String fileId, int chunkNo) {
-        File file = new File(getServerId() + "/" + fileId + chunkNo + ".bak");
+        File file = new File(getServerId() + "/" + fileId + chunkNo);
 
         try {
             file.mkdirs();

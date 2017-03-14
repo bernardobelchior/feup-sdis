@@ -4,9 +4,7 @@ import server.Server;
 import server.Controller;
 import server.messaging.MessageBuilder;
 
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static server.Server.*;
@@ -63,25 +61,24 @@ public class RecoverFile {
     }
 
     private void recoverFile() {
+
         new Thread(() -> {
             FileOutputStream fileOutputStream;
             try {
-                fileOutputStream = new FileOutputStream(filename);
+                fileOutputStream = new FileOutputStream("novo.pdf",true);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
                 return;
             }
 
-            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++)
+            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++){
+                System.out.println("ChunkNo " + chunkNo);
                 try {
-                    System.out.println(chunkNo);
-                    String temp = new String(receivedChunks.get(chunkNo).toString());
-                    System.out.println(temp); //nao da erro
-                    System.out.println(receivedChunks.get(chunkNo).length); //nao da erro
-                    fileOutputStream.write(receivedChunks.get(chunkNo), chunkNo*CHUNK_SIZE, receivedChunks.get(chunkNo).length - chunkNo*CHUNK_SIZE);
+                    fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
+            }
         }).start();
     }
 
