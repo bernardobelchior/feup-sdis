@@ -5,6 +5,7 @@ import server.Controller;
 import server.messaging.MessageBuilder;
 
 import java.io.*;
+import java.nio.channels.FileChannel;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static server.Server.*;
@@ -65,15 +66,19 @@ public class RecoverFile {
         new Thread(() -> {
             FileOutputStream fileOutputStream;
             try {
-                fileOutputStream = new FileOutputStream("novo.pdf",true);
+                //TODO: Change name - > only to test -> change to filename
+                fileOutputStream = new FileOutputStream("novo.txt");
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
                 return;
             }
 
             for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++){
+                FileChannel channel = fileOutputStream.getChannel();
                 System.out.println("ChunkNo " + chunkNo);
                 try {
+                    //Not Working
+                    channel.position(chunkNo*CHUNK_SIZE);
                     fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
                 } catch (IOException e) {
                     e.printStackTrace();
