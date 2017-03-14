@@ -24,7 +24,7 @@ public class BackupFile {
 
     private Controller controller;
 
-    BackupFile(String filename, int desiredReplicationDegree) {
+    public BackupFile(String filename, int desiredReplicationDegree) {
         this.filename = filename;
         this.desiredReplicationDegree = desiredReplicationDegree;
         file = new File(filename);

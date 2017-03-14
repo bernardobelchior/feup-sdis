@@ -18,7 +18,7 @@ public class RecoverFile {
     private int numChunks;
     private ConcurrentHashMap<Integer, byte[]> receivedChunks;
 
-    RecoverFile(String filename, String fileId) {
+    public RecoverFile(String filename, String fileId) {
         this.filename = filename;
         this.fileId = fileId;
     }
