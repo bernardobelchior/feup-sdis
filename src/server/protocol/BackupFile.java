@@ -43,14 +43,15 @@ public class BackupFile {
             return;
         }
 
-        byte[] chunk = new byte[CHUNK_SIZE];
 
         try {
             int chunkNo = 0;
             int bytesRead;
+            byte[] chunk = new byte[CHUNK_SIZE];
             while ((bytesRead = inputStream.read(chunk)) != -1) {
                 backupChunk(chunkNo, chunk, bytesRead);
                 chunkNo++;
+                chunk = new byte[CHUNK_SIZE];
             }
         } catch (IOException e) {
             e.printStackTrace();

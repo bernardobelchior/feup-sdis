@@ -5,7 +5,7 @@ import server.Controller;
 import server.messaging.MessageBuilder;
 
 import java.io.*;
-import java.nio.channels.FileChannel;
+import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static server.Server.*;
@@ -66,19 +66,15 @@ public class RecoverFile {
         new Thread(() -> {
             FileOutputStream fileOutputStream;
             try {
-                //TODO: Change name - > only to test -> change to filename
-                fileOutputStream = new FileOutputStream("novo.txt");
+                fileOutputStream = new FileOutputStream(getFilePath() + "/" + filename);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
                 return;
             }
 
             for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++){
-                FileChannel channel = fileOutputStream.getChannel();
-                System.out.println("ChunkNo " + chunkNo);
                 try {
                     //Not Working
-                    channel.position(chunkNo*CHUNK_SIZE);
                     fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -89,5 +85,17 @@ public class RecoverFile {
 
     public String getFileId() {
         return fileId;
+    }
+
+    public Path getFilePath(){
+
+        File file = new File( getServerId()+ "/RestoredFiles");
+
+        if(!file.exists()){
+            file.mkdirs();
+        }
+
+        return file.toPath();
+
     }
 }

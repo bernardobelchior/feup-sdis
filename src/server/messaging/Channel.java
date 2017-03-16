@@ -59,7 +59,7 @@ public class Channel {
 
                 try {
                     socket.receive(packet);
-                    controller.processMessage(packet.getData());
+                    controller.processMessage(packet.getData(), packet.getLength());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }

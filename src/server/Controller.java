@@ -45,9 +45,11 @@ public class Controller {
         recoveryChannel.sendMessage(message);
     }
 
-    public void processMessage(byte[] message) {
+    public void processMessage(byte[] message, int size) {
         new Thread(() -> {
-            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message);
+
+            ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message, 0, size);
+
             try {
                 String[] headerFields = parseHeader(byteArrayInputStream).split(" ");
 
