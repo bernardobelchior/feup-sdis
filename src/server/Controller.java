@@ -9,24 +9,34 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
-import static server.messaging.MessageParser.parseHeader;
 import static server.Server.*;
+import static server.messaging.MessageParser.parseHeader;
 
 public class Controller {
 
     private final Channel controlChannel;
     private final Channel backupChannel;
     private final Channel recoveryChannel;
-    private final ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> fileChunkMap = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Integer> desiredReplicationDegreesMap = new ConcurrentHashMap<>();
+    private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> fileChunkMap;
+    private ConcurrentHashMap<String, Integer> desiredReplicationDegreesMap;
     private final ConcurrentHashMap<String, RecoverFile> ongoingRecoveries = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToSend = new ConcurrentHashMap<>();
+    private Set<String> storedChunks;
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
+
+        loadServerMetadata();
 
         this.controlChannel.setController(this);
         this.backupChannel.setController(this);
@@ -70,16 +80,16 @@ public class Controller {
                         processStoredMessage(headerFields[3], headerFields[4]);
                         break;
                     case RESTORE_INIT:
-                        if(headerFields.length != 5)
+                        if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processGetChunkMessage(headerFields[3], headerFields[4]);
+                        processGetChunkMessage(headerFields[2], headerFields[3], headerFields[4]);
                         break;
                     case RESTORE_SUCCESS:
-                        if(headerFields.length != 5)
+                        if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processRestoredMessage(byteArrayInputStream,headerFields[3],headerFields[4]);
+                        processRestoredMessage(byteArrayInputStream, headerFields[3], headerFields[4]);
                         break;
                     case DELETE_INIT:
 
@@ -112,16 +122,26 @@ public class Controller {
         if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) > desiredReplicationDegree)
             return;
 
-        Files.copy(byteArrayInputStream, getFilePath(fileId, chunkNo), StandardCopyOption.REPLACE_EXISTING);
+        try {
+            Files.copy(byteArrayInputStream, createFile(fileId, chunkNo), StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException e) {
+            System.err.println("Could not create file to save chunk. Discarding...");
+            e.printStackTrace();
+            return;
+        }
+
+        storedChunks.add(getChunkId(fileId, chunkNo));
         incrementReplicationDegree(fileId, chunkNo);
 
-        controlChannel.sendMessage(
+        controlChannel.sendMessageWithRandomDelay(
                 MessageBuilder.createMessage(
                         Server.BACKUP_SUCCESS,
                         getProtocolVersion(),
                         Integer.toString(getServerId()),
                         fileId,
-                        chunkNoStr));
+                        chunkNoStr),
+                BACKUP_REPLY_MIN_DELAY,
+                BACKUP_REPLY_MAX_DELAY);
     }
 
     private void processStoredMessage(String fileId, String chunkNoStr) throws InvalidHeaderException {
@@ -130,34 +150,48 @@ public class Controller {
         incrementReplicationDegree(fileId, chunkNo);
     }
 
-    private void processGetChunkMessage(String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
+    private void processGetChunkMessage(String senderId, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
+        if (Integer.parseInt(senderId) == getServerId()) // Same sender
+            return;
+
         Utils.checkFileIdValidity(fileId);
         int chunkNo = Utils.parseChunkNo(chunkNoStr);
 
-        if(ongoingRecoveries.get(fileId)!=null)
-            return;
+        ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
+        chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
 
-        byte[] chunkBody = Files.readAllBytes(getFilePath(fileId,chunkNo));
+        byte[] chunkBody = Files.readAllBytes(createFile(fileId, chunkNo));
 
-        controlChannel.sendMessage(MessageBuilder.createMessage(
-                chunkBody,
-                Server.RESTORE_SUCCESS,
-                getProtocolVersion(),
-                Integer.toString(getServerId()),
-                fileId,
-                chunkNoStr));
+        executorService.schedule(() -> controlChannel.sendMessage(
+                MessageBuilder.createMessage(
+                        chunkBody,
+                        Server.RESTORE_SUCCESS,
+                        getProtocolVersion(),
+                        Integer.toString(getServerId()),
+                        fileId,
+                        chunkNoStr))
+                , Utils.randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
     private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
-        RecoverFile recover;
         Utils.checkFileIdValidity(fileId);
         int chunkNo = Utils.parseChunkNo(chunkNoStr);
+        RecoverFile recover = ongoingRecoveries.get(fileId);
+        ScheduledExecutorService chunkToSend = chunksToSend.get(getChunkId(fileId, chunkNo));
+
+        /* If there is a chunk waiting to be sent, then delete it */
+        if (chunkToSend != null) {
+            chunkToSend.shutdown();
+            chunksToSend.remove(getChunkId(fileId, chunkNo));
+        }
+
+        /* If the server is not currently trying to restore the file */
+        if (recover == null)
+            return;
 
         byte[] chunkBody = new byte[byteArrayInputStream.available()];
         byteArrayInputStream.read(chunkBody, 0, chunkBody.length);
-
-        if((recover = ongoingRecoveries.get(fileId))!=null)
-            recover.putChunk(chunkNo,chunkBody);
+        recover.putChunk(chunkNo, chunkBody);
     }
 
 
@@ -168,15 +202,10 @@ public class Controller {
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
-    private Path getFilePath(String fileId, int chunkNo) {
-        File file = new File(getServerId() + "/" + fileId + chunkNo);
-
-        try {
-            file.mkdirs();
-            file.createNewFile();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    private Path createFile(String fileId, int chunkNo) throws IOException {
+        File file = new File(getServerId() + "/" + getChunkId(fileId, chunkNo));
+        file.mkdirs();
+        file.createNewFile();
 
         return file.toPath();
     }
@@ -196,5 +225,59 @@ public class Controller {
         ConcurrentHashMap<Integer, Integer> chunkMap = fileChunkMap.get(fileId);
 
         return chunkMap == null ? 0 : chunkMap.size();
+    }
+
+    private void loadServerMetadata() {
+        ObjectInputStream objectInputStream;
+
+        try {
+            objectInputStream = new ObjectInputStream(new FileInputStream("." + getServerId()));
+        } catch (IOException e) {
+            System.err.println("Could not open configuration file.");
+            e.printStackTrace();
+            return;
+        }
+
+        try {
+            storedChunks = (Set<String>) objectInputStream.readObject();
+            desiredReplicationDegreesMap = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
+            fileChunkMap = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
+        } catch (IOException e) {
+            System.err.println("Could not read from configuration file.");
+            e.printStackTrace();
+            storedChunks = Collections.synchronizedSet(new HashSet<String>());
+            desiredReplicationDegreesMap = new ConcurrentHashMap<>();
+            fileChunkMap = new ConcurrentHashMap<>();
+        } catch (ClassNotFoundException e) {
+            System.err.println("Unknown content in configuration file.");
+            e.printStackTrace();
+            storedChunks = Collections.synchronizedSet(new HashSet<String>());
+            desiredReplicationDegreesMap = new ConcurrentHashMap<>();
+            fileChunkMap = new ConcurrentHashMap<>();
+        }
+    }
+
+    private void saveServerMetadata() {
+        ObjectOutputStream objectOutputStream;
+        try {
+            objectOutputStream = new ObjectOutputStream(new FileOutputStream("." + getServerId()));
+        } catch (IOException e) {
+            System.err.println("Could not open configuration file.");
+            e.printStackTrace();
+            return;
+        }
+
+        try {
+            objectOutputStream.writeObject(storedChunks);
+            objectOutputStream.writeObject(desiredReplicationDegreesMap);
+            objectOutputStream.writeObject(fileChunkMap);
+        } catch (IOException e) {
+            System.err.println("Could not write to configuration file.");
+            e.printStackTrace();
+        }
+    }
+
+    private String getChunkId(String fileId, int chunkNo) {
+        return fileId + chunkNo;
     }
 }

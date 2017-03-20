@@ -3,6 +3,7 @@ package server;
 import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Random;
 
 /**
  * Utilities class.
@@ -93,5 +94,15 @@ public class Utils {
         } catch (NumberFormatException e) {
             throw new InvalidHeaderException("Invalid Sender Id " + senderId);
         }
+    }
+
+    /**
+     * Returns a random int between min and max.
+     * @param min Lower bound
+     * @param max Upper bound
+     * @return Random number in the specified interval.
+     */
+    public static int randomBetween(int min, int max) {
+        return new Random().nextInt(max - min) + min;
     }
 }

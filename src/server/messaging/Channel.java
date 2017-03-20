@@ -3,11 +3,14 @@ package server.messaging;
 import common.Common;
 import server.Controller;
 import server.Server;
+import server.Utils;
 
 import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 public class Channel {
     private MulticastSocket socket;
@@ -39,6 +42,25 @@ public class Channel {
         return socket;
     }
 
+    /**
+     * Sends message with random delay between {min} and {max} milliseconds.
+     *
+     * @param message Message to send.
+     * @param min     Minimum delay in milliseconds.
+     * @param max     Maximum delay in milliseconds.
+     */
+    public void sendMessageWithRandomDelay(byte[] message, int min, int max) {
+        Executors.newSingleThreadScheduledExecutor().schedule(
+                () -> sendMessage(message),
+                Utils.randomBetween(min, max),
+                TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * Sends message.
+     *
+     * @param message Message to send.
+     */
     public void sendMessage(byte[] message) {
         DatagramPacket packet = new DatagramPacket(message, message.length, address, port);
         System.out.println(new String(message));

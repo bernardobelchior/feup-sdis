@@ -14,13 +14,15 @@ public class Server {
     public static final String BACKUP_SUCCESS = "STORED";
     public static final int BACKUP_TIMEOUT = 1000;
     public static final int MAX_BACKUP_ATTEMPTS = 5;
-    public static final int BACKUP_REPLY_DELAY = 400;
+    public static final int BACKUP_REPLY_MIN_DELAY = 0;
+    public static final int BACKUP_REPLY_MAX_DELAY = 400;
 
     // Chunk Restore
     public static final String RESTORE_INIT = "GETCHUNK";
     public static final String RESTORE_SUCCESS = "CHUNK";
     public static final int RESTORE_TIMEOUT = 1000;
-    public static final int RESTORE_REPLY_DELAY = 400;
+    public static final int RESTORE_REPLY_MIN_DELAY = 0;
+    public static final int RESTORE_REPLY_MAX_DELAY = 400;
 
 
     // File Deletion

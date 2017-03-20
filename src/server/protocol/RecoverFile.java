@@ -41,15 +41,15 @@ public class RecoverFile {
     private void requestChunk(int chunkNo) {
         new Thread(() -> {
             byte[] message = MessageBuilder.createMessage(Server.RESTORE_INIT, getProtocolVersion(), Integer.toString(getServerId()), fileId, Integer.toString(chunkNo));
+
             do {
                 controller.sendToRecoveryChannel(message);
                 try {
-                    Thread.sleep(RESTORE_REPLY_DELAY);
+                    Thread.sleep(RESTORE_TIMEOUT);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-            }
-            while (receivedChunks.get(chunkNo) == null);
+            } while (receivedChunks.get(chunkNo) == null);
 
         }).start();
     }
@@ -72,7 +72,7 @@ public class RecoverFile {
                 return;
             }
 
-            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++){
+            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++) {
                 try {
                     //Not Working
                     fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
@@ -87,11 +87,11 @@ public class RecoverFile {
         return fileId;
     }
 
-    public Path getFilePath(){
+    public Path getFilePath() {
 
-        File file = new File( getServerId()+ "/RestoredFiles");
+        File file = new File(getServerId() + "/RestoredFiles");
 
-        if(!file.exists()){
+        if (!file.exists()) {
             file.mkdirs();
         }
 
