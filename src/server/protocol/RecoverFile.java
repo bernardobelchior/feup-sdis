@@ -1,10 +1,13 @@
 package server.protocol;
 
-import server.Server;
 import server.Controller;
+import server.Server;
 import server.messaging.MessageBuilder;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,28 +17,45 @@ public class RecoverFile {
     private final String filename;
     private final String fileId;
     private Controller controller;
-    private int numChunks;
     private ConcurrentHashMap<Integer, byte[]> receivedChunks;
+    private int currentChunk = 0;
+    private static final int CHUNKS_PER_REQUEST = 10;
+    private static final int WAIT_FOR_CHUNKS = 500;
 
     public RecoverFile(String filename, String fileId) {
         this.filename = filename;
         this.fileId = fileId;
+        receivedChunks = new ConcurrentHashMap<>();
     }
 
 
-    public void start(Controller controller) throws FileNotFoundException {
+    public void start(Controller controller) {
         this.controller = controller;
 
-        /* If numChunks == 0, then the file is not backed up in the network */
-        numChunks = controller.getNumChunks(fileId);
+        while (!isLastChunk()) {
+            System.out.println("Requesting chunks " + currentChunk + " to " + (currentChunk + CHUNKS_PER_REQUEST - 1) + " for fileId " + fileId + ".");
 
-        if (numChunks == 0)
-            throw new FileNotFoundException("File not found in the network.");
+            /* Requests CHUNKS_PER_REQUEST chunks at a time where i is the chunk number. */
+            for (int i = currentChunk; i < currentChunk + CHUNKS_PER_REQUEST; i++)
+                requestChunk(i);
 
-        receivedChunks = new ConcurrentHashMap<>(numChunks);
+            currentChunk += CHUNKS_PER_REQUEST;
 
-        for (int chunkNo = 0; chunkNo < numChunks; chunkNo++)  /* TODO: Afterwards, do not ask for all chunks at once.*/
-            requestChunk(chunkNo);
+            while (receivedChunks.size() < currentChunk) {
+                try {
+                    Thread.sleep(WAIT_FOR_CHUNKS);
+                } catch (InterruptedException ignored) {
+                }
+            }
+        }
+
+        recoverFile();
+    }
+
+    private boolean isLastChunk() {
+        byte[] chunk = receivedChunks.get(receivedChunks.size() - 1); // Get last chunk
+
+        return !(chunk == null || chunk.length == CHUNK_SIZE); // If the chunk does not exist or is less than CHUNK_SIZE
     }
 
     private void requestChunk(int chunkNo) {
@@ -56,9 +76,6 @@ public class RecoverFile {
 
     public void putChunk(int chunkNo, byte[] chunk) {
         receivedChunks.put(chunkNo, chunk);
-
-        if (receivedChunks.size() == numChunks)
-            recoverFile();
     }
 
     private void recoverFile() {

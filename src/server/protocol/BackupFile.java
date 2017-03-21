@@ -47,12 +47,18 @@ public class BackupFile {
         try {
             int chunkNo = 0;
             int bytesRead;
+            int oldBytesRead = 0;
             byte[] chunk = new byte[CHUNK_SIZE];
             while ((bytesRead = inputStream.read(chunk)) != -1) {
                 backupChunk(chunkNo, chunk, bytesRead);
                 chunkNo++;
                 chunk = new byte[CHUNK_SIZE];
+                oldBytesRead = bytesRead;
             }
+
+            if (oldBytesRead == CHUNK_SIZE)
+                backupChunk(chunkNo, chunk, 0);
+
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -66,7 +72,6 @@ public class BackupFile {
                 effectiveChunk = Arrays.copyOf(chunk, size);
 
             int attempts = 0;
-            int currentReplicationDegree;
             do {
                 byte[] message = MessageBuilder.createMessage(effectiveChunk,
                         Server.BACKUP_INIT,

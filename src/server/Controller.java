@@ -123,7 +123,8 @@ public class Controller {
 
         desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
 
-        if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) > desiredReplicationDegree)
+        /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
+        if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
         try {
@@ -221,14 +222,14 @@ public class Controller {
     }
 
     public void startFileRecovery(RecoverFile recoverFile) throws FileNotFoundException {
+        /* If the fileId does not exist in the network */
+        if (desiredReplicationDegreesMap.get(recoverFile.getFileId()) == null) {
+            System.err.println("File not found in the network.");
+            return;
+        }
+
         ongoingRecoveries.put(recoverFile.getFileId(), recoverFile);
         recoverFile.start(this);
-    }
-
-    public int getNumChunks(String fileId) {
-        ConcurrentHashMap<Integer, Integer> chunkMap = fileChunkMap.get(fileId);
-
-        return chunkMap == null ? 0 : chunkMap.size();
     }
 
     private boolean loadServerMetadata() {
