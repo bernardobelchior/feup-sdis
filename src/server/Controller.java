@@ -36,7 +36,11 @@ public class Controller {
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
 
-        loadServerMetadata();
+        if (!loadServerMetadata()) {
+            storedChunks = Collections.synchronizedSet(new HashSet<String>());
+            desiredReplicationDegreesMap = new ConcurrentHashMap<>();
+            fileChunkMap = new ConcurrentHashMap<>();
+        }
 
         this.controlChannel.setController(this);
         this.backupChannel.setController(this);
@@ -227,15 +231,14 @@ public class Controller {
         return chunkMap == null ? 0 : chunkMap.size();
     }
 
-    private void loadServerMetadata() {
+    private boolean loadServerMetadata() {
         ObjectInputStream objectInputStream;
 
         try {
             objectInputStream = new ObjectInputStream(new FileInputStream("." + getServerId()));
         } catch (IOException e) {
             System.err.println("Could not open configuration file.");
-            e.printStackTrace();
-            return;
+            return false;
         }
 
         try {
@@ -244,17 +247,14 @@ public class Controller {
             fileChunkMap = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
         } catch (IOException e) {
             System.err.println("Could not read from configuration file.");
-            e.printStackTrace();
-            storedChunks = Collections.synchronizedSet(new HashSet<String>());
-            desiredReplicationDegreesMap = new ConcurrentHashMap<>();
-            fileChunkMap = new ConcurrentHashMap<>();
+            return false;
+
         } catch (ClassNotFoundException e) {
             System.err.println("Unknown content in configuration file.");
-            e.printStackTrace();
-            storedChunks = Collections.synchronizedSet(new HashSet<String>());
-            desiredReplicationDegreesMap = new ConcurrentHashMap<>();
-            fileChunkMap = new ConcurrentHashMap<>();
+            return false;
         }
+
+        return true;
     }
 
     private void saveServerMetadata() {
