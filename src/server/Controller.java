@@ -52,14 +52,30 @@ public class Controller {
         this.recoveryChannel.listen();
     }
 
+    /**
+     * Sends message to Backup Channel
+     *
+     * @param message Message to send.
+     */
     public void sendToBackupChannel(byte[] message) {
         backupChannel.sendMessage(message);
     }
 
+    /**
+     * Sends message to Recovery Channel
+     *
+     * @param message Message to send
+     */
     public void sendToRecoveryChannel(byte[] message) {
         recoveryChannel.sendMessage(message);
     }
 
+    /**
+     * Processes the message received asynchronously.
+     *
+     * @param message Message to process.
+     * @param size    Message size
+     */
     public void processMessage(byte[] message, int size) {
         new Thread(() -> {
 
@@ -94,6 +110,7 @@ public class Controller {
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
+                        System.out.println("Received " + RESTORE_SUCCESS + " from " + headerFields[2] + " for fileId " + headerFields[3] + " and chunk number " + headerFields[4]);
                         processRestoredMessage(byteArrayInputStream, headerFields[3], headerFields[4]);
                         break;
                     case DELETE_INIT:
@@ -114,6 +131,17 @@ public class Controller {
         }).start();
     }
 
+    /**
+     * Processes a backup message
+     *
+     * @param byteArrayInputStream InputStream containing everything after the end of the header
+     * @param senderId             Sender Id
+     * @param fileId               File Id
+     * @param chunkNoStr           Chunk number as String
+     * @param replicationDegreeStr Replication degree as String
+     * @throws InvalidHeaderException In case of malformed header arguments.
+     * @throws IOException            In case of error storing the received chunk.
+     */
     private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, String senderId, String fileId, String chunkNoStr, String replicationDegreeStr) throws InvalidHeaderException, IOException {
         if (Integer.parseInt(senderId) == getServerId()) // Same sender
             return;
