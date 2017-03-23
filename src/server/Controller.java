@@ -18,6 +18,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static server.Server.*;
+import static server.Utils.*;
 import static server.messaging.MessageParser.parseHeader;
 
 public class Controller {
@@ -117,9 +118,9 @@ public class Controller {
         if (Integer.parseInt(senderId) == getServerId()) // Same sender
             return;
 
-        Utils.checkFileIdValidity(fileId);
-        int chunkNo = Utils.parseChunkNo(chunkNoStr);
-        int desiredReplicationDegree = Utils.parseReplicationDegree(replicationDegreeStr);
+        checkFileIdValidity(fileId);
+        int chunkNo = parseChunkNo(chunkNoStr);
+        int desiredReplicationDegree = parseReplicationDegree(replicationDegreeStr);
 
         desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
 
@@ -128,9 +129,14 @@ public class Controller {
             return;
 
         try {
-            Files.copy(byteArrayInputStream, createFile(fileId, chunkNo), StandardCopyOption.REPLACE_EXISTING);
+            Path chunkPath = getChunkPath(fileId, chunkNo);
+            if (chunkPath.toFile().exists())
+                chunkPath.toFile().delete();
+
+            Files.copy(byteArrayInputStream, chunkPath, StandardCopyOption.REPLACE_EXISTING);
+            System.out.println("Stored chunk " + chunkNoStr + " of fileId " + fileId + ".");
         } catch (IOException e) {
-            System.err.println("Could not create file to save chunk. Discarding...");
+            System.err.println("Could not create file to store chunk. Discarding...");
             e.printStackTrace();
             return;
         }
@@ -150,8 +156,8 @@ public class Controller {
     }
 
     private void processStoredMessage(String fileId, String chunkNoStr) throws InvalidHeaderException {
-        Utils.checkFileIdValidity(fileId);
-        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+        checkFileIdValidity(fileId);
+        int chunkNo = parseChunkNo(chunkNoStr);
         incrementReplicationDegree(fileId, chunkNo);
     }
 
@@ -159,28 +165,40 @@ public class Controller {
         if (Integer.parseInt(senderId) == getServerId()) // Same sender
             return;
 
-        Utils.checkFileIdValidity(fileId);
-        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+        System.out.println("Requested chunk number " + chunkNoStr + " of fileId " + fileId + ".");
+
+        /* If the requested chunk is not stored in our server, then do nothing. */
+        if (!storedChunks.contains(fileId + chunkNoStr)) {
+            System.out.println("But the chunk is not stored in this server.");
+            return;
+        }
+
+
+        checkFileIdValidity(fileId);
+        int chunkNo = parseChunkNo(chunkNoStr);
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
 
-        byte[] chunkBody = Files.readAllBytes(createFile(fileId, chunkNo));
+        byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunkNo));
 
-        executorService.schedule(() -> controlChannel.sendMessage(
-                MessageBuilder.createMessage(
-                        chunkBody,
-                        Server.RESTORE_SUCCESS,
-                        getProtocolVersion(),
-                        Integer.toString(getServerId()),
-                        fileId,
-                        chunkNoStr))
-                , Utils.randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
+        executorService.schedule(() -> {
+            System.out.println("Retrieving chunk " + chunkNoStr + " of fileId " + fileId + "...");
+
+            controlChannel.sendMessage(
+                    MessageBuilder.createMessage(
+                            chunkBody,
+                            Server.RESTORE_SUCCESS,
+                            getProtocolVersion(),
+                            Integer.toString(getServerId()),
+                            fileId,
+                            chunkNoStr));
+        }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
     private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
-        Utils.checkFileIdValidity(fileId);
-        int chunkNo = Utils.parseChunkNo(chunkNoStr);
+        checkFileIdValidity(fileId);
+        int chunkNo = parseChunkNo(chunkNoStr);
         RecoverFile recover = ongoingRecoveries.get(fileId);
         ScheduledExecutorService chunkToSend = chunksToSend.get(getChunkId(fileId, chunkNo));
 
@@ -207,17 +225,11 @@ public class Controller {
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
-    private Path createFile(String fileId, int chunkNo) throws IOException {
-        File file = new File(getServerId() + "/" + getChunkId(fileId, chunkNo));
-        file.mkdirs();
-        file.createNewFile();
-
-        return file.toPath();
-    }
-
     public void startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         fileChunkMap.put(backupFile.getFileId(), chunksReplicationDegree);
+        desiredReplicationDegreesMap.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
+
         backupFile.start(this, chunksReplicationDegree);
     }
 

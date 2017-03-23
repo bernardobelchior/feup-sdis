@@ -17,6 +17,8 @@ import static server.Server.*;
 
 public class BackupFile {
     private final String filename;
+
+
     private final int desiredReplicationDegree;
     private final String fileId;
     private final File file;
@@ -90,7 +92,12 @@ public class BackupFile {
                 }
                 attempts++;
             }
-            while (chunksReplicationDegree.get(chunkNo) < desiredReplicationDegree && attempts < Server.MAX_BACKUP_ATTEMPTS);
+            while (chunksReplicationDegree.getOrDefault(chunkNo, 0) < desiredReplicationDegree && attempts < Server.MAX_BACKUP_ATTEMPTS);
+
+            if (attempts >= Server.MAX_BACKUP_ATTEMPTS)
+                System.out.println("Max backup attempts reached. Stopping backup process...");
+            else
+                System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + chunksReplicationDegree.getOrDefault(chunkNo, 0) + ".");
         }).start();
     }
 
@@ -106,5 +113,9 @@ public class BackupFile {
 
     public String getFileId() {
         return fileId;
+    }
+
+    public int getDesiredReplicationDegree() {
+        return desiredReplicationDegree;
     }
 }

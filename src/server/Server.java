@@ -41,6 +41,9 @@ public class Server {
     public static final int MAX_HEADER_SIZE = 512;
     public static final int CHUNK_SIZE = 64 * 1000;
 
+    public static final String RESTORED_DIR = "RestoredFiles/";
+    public static final String BASE_DIR = Integer.toString(getServerId()) + "/";
+
     private static String protocolVersion;
     private static int serverId;
 
@@ -51,6 +54,9 @@ public class Server {
         protocolVersion = args[0];
         serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
+
+        System.out.println("Starting server with id " + serverId + ".");
+        System.out.println("Access Point: " + serviceAccessPoint);
 
         Channel controlChannel = new Channel(args[3], args[4]);
         Channel backupChannel = new Channel(args[5], args[6]);
