@@ -110,8 +110,7 @@ public class Controller {
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        System.out.println("Received " + RESTORE_SUCCESS + " from " + headerFields[2] + " for fileId " + headerFields[3] + " and chunk number " + headerFields[4]);
-                        processRestoredMessage(byteArrayInputStream, headerFields[3], headerFields[4]);
+                        processRestoredMessage(byteArrayInputStream, headerFields[2], headerFields[3], headerFields[4]);
                         break;
                     case DELETE_INIT:
 
@@ -197,10 +196,9 @@ public class Controller {
 
         /* If the requested chunk is not stored in our server, then do nothing. */
         if (!storedChunks.contains(fileId + chunkNoStr)) {
-            System.out.println("But the chunk is not stored in this server.");
+            System.out.println("Chunk number" + chunkNoStr + " of fileId " + fileId + " is not stored in this server.");
             return;
         }
-
 
         checkFileIdValidity(fileId);
         int chunkNo = parseChunkNo(chunkNoStr);
@@ -224,7 +222,12 @@ public class Controller {
         }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
-    private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
+    private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, String serverId, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
+        if (Integer.parseInt(serverId) == getServerId()) //Same sender
+            return;
+
+        System.out.println("Received " + RESTORE_SUCCESS + " from " + serverId + " for fileId " + fileId + " and chunk number " + chunkNoStr);
+
         checkFileIdValidity(fileId);
         int chunkNo = parseChunkNo(chunkNoStr);
         RecoverFile recover = ongoingRecoveries.get(fileId);
@@ -232,7 +235,8 @@ public class Controller {
 
         /* If there is a chunk waiting to be sent, then delete it */
         if (chunkToSend != null) {
-            chunkToSend.shutdown();
+            System.out.println("Received " + RESTORE_SUCCESS + " for fileId " + fileId + " chunk number " + chunkNoStr + ". Discarding...");
+            chunkToSend.shutdownNow();
             chunksToSend.remove(getChunkId(fileId, chunkNo));
         }
 
