@@ -2,6 +2,7 @@ package server;
 
 import common.IInitiatorPeer;
 import server.protocol.BackupFile;
+import server.protocol.DeleteFile;
 import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
@@ -42,7 +43,13 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
 
     @Override
     public void delete(String filename) throws RemoteException {
-        System.out.println("Delete");
+        String fileId = generateFileId(filename);
+        System.out.println("Starting delete of file with fileId " + fileId + "...");
+
+        controller.startFileDelete(new DeleteFile(filename, fileId));
+
+        
+
     }
 
     @Override

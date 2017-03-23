@@ -26,7 +26,6 @@ public class RecoverFile {
         receivedChunks = new ConcurrentHashMap<>();
     }
 
-
     public void start(Controller controller) {
         this.controller = controller;
 

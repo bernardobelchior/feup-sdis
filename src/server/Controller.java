@@ -3,6 +3,7 @@ package server;
 import server.messaging.Channel;
 import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
+import server.protocol.DeleteFile;
 import server.protocol.RecoverFile;
 
 import java.io.*;
@@ -26,11 +27,21 @@ public class Controller {
     private final Channel controlChannel;
     private final Channel backupChannel;
     private final Channel recoveryChannel;
+
+    /*Concurrent HashMap with fileId and Concurrent HashMap with file's chunkNo and respective replication degree*/
     private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> fileChunkMap;
+
+    /*Concurrent HashMap with fileId and respective desired Replication Degree*/
     private ConcurrentHashMap<String, Integer> desiredReplicationDegreesMap;
+
+    /*Concurrent HashMap with fileId and respective RecoverFile object*/
     private final ConcurrentHashMap<String, RecoverFile> ongoingRecoveries = new ConcurrentHashMap<>();
+
+    /*Concurrent HashMap with String (fileId + chunkNo) and respective ExecutorService, responsible for schedule processRestoredMessage function*/
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToSend = new ConcurrentHashMap<>();
-    private Set<String> storedChunks;
+
+    /*Server's stored chunks*/
+    private ConcurrentHashMap<String, Set<Integer>> storedChunks;
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
         this.controlChannel = controlChannel;
@@ -38,7 +49,7 @@ public class Controller {
         this.recoveryChannel = recoveryChannel;
 
         if (!loadServerMetadata()) {
-            storedChunks = Collections.synchronizedSet(new HashSet<String>());
+            storedChunks = new ConcurrentHashMap<>();
             desiredReplicationDegreesMap = new ConcurrentHashMap<>();
             fileChunkMap = new ConcurrentHashMap<>();
         }
@@ -68,6 +79,15 @@ public class Controller {
      */
     public void sendToRecoveryChannel(byte[] message) {
         recoveryChannel.sendMessage(message);
+    }
+
+    /**
+     * Sends Delete message to Control Channel
+     *
+     * @param message
+     */
+    public void sendDeleteMessage(byte[] message) {
+        controlChannel.sendMessage(message);
     }
 
     /**
@@ -124,7 +144,11 @@ public class Controller {
                         processRestoredMessage(byteArrayInputStream, senderId, headerFields[3], chunkNo);
                         break;
                     case DELETE_INIT:
+                        if (headerFields.length != 4)
+                            throw new InvalidHeaderException("A file delete header must have exactly 4 fields. Received " + headerFields.length + ".");
 
+                        System.out.println("Received " + DELETE_INIT + "from" + headerFields[2] + "for fileId" + headerFields[3]);
+                        processDeleteMessage(headerFields[3]);
                         break;
                     case RECLAIM_INIT: //TODO: Define implementation
                         break;
@@ -177,7 +201,16 @@ public class Controller {
             return;
         }
 
-        storedChunks.add(getChunkId(fileId, chunkNo));
+        Set<Integer> chunkNoSet;
+
+        /* If server already has a set for that fileId, adds the new chunkNo, other way creates a new Set */
+        if(storedChunks.containsKey(fileId))
+            chunkNoSet = storedChunks.get(fileId);
+        else chunkNoSet = new HashSet<>();
+
+        chunkNoSet.add(chunkNo);
+        storedChunks.put(fileId,chunkNoSet);
+
         incrementReplicationDegree(fileId, chunkNo);
 
         controlChannel.sendMessageWithRandomDelay(
@@ -202,10 +235,12 @@ public class Controller {
         System.out.println("Requested chunk number " + chunkNo + " of fileId " + fileId + ".");
 
         /* If the requested chunk is not stored in our server, then do nothing. */
-        if (!storedChunks.contains(fileId + chunkNo)) {
-            System.out.println("Chunk number" + chunkNo + " of fileId " + fileId + " is not stored in this server.");
+        if(!storedChunks.get(fileId).contains(chunkNo)){
+            System.out.println("But the chunk is not stored in this server.");
             return;
         }
+
+        checkFileIdValidity(fileId);
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
@@ -251,6 +286,13 @@ public class Controller {
         recover.putChunk(chunkNo, chunkBody);
     }
 
+    private void processDeleteMessage(String fileId) throws InvalidHeaderException {
+       // fileChunkMap.remove(fileId);
+        //desiredReplicationDegreesMap.remove(fileId);
+        //storedChunks.remove(fileId);
+
+    }
+
 
     private void incrementReplicationDegree(String fileId, int chunkNo) {
         fileChunkMap.putIfAbsent(fileId, new ConcurrentHashMap<>());
@@ -278,6 +320,16 @@ public class Controller {
         recoverFile.start(this);
     }
 
+    public void startFileDelete(DeleteFile deleteFile) {
+        /*If the fileId does not exist in the network*/
+        if (desiredReplicationDegreesMap.get(deleteFile.getFileId()) == null) {
+            System.out.println("File not found in the network.");
+            return;
+        }
+
+        deleteFile.start(this);
+    }
+
     private boolean loadServerMetadata() {
         ObjectInputStream objectInputStream;
 
@@ -289,7 +341,7 @@ public class Controller {
         }
 
         try {
-            storedChunks = (Set<String>) objectInputStream.readObject();
+            storedChunks = (ConcurrentHashMap<String, Set<Integer>>) objectInputStream.readObject();
             desiredReplicationDegreesMap = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
             fileChunkMap = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
         } catch (IOException e) {
