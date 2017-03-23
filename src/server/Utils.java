@@ -51,7 +51,7 @@ public class Utils {
             throw new InvalidHeaderException("Replication degree field cannot be larger than 1 character. Received: " + replicationDegree);
 
         try {
-            return Integer.parseUnsignedInt(replicationDegree);
+            return Integer.parseInt(replicationDegree);
         } catch (NumberFormatException e) {
             throw new InvalidHeaderException("Invalid replication degree " + replicationDegree);
         }
@@ -98,6 +98,20 @@ public class Utils {
             return Integer.parseUnsignedInt(senderId);
         } catch (NumberFormatException e) {
             throw new InvalidHeaderException("Invalid Sender Id " + senderId);
+        }
+    }
+
+    /**
+     * Validates the server version.
+     *
+     * @param serverVersion Server version string
+     * @throws InvalidHeaderException In case the header is malformed
+     */
+    public static double parseServerVersion(String serverVersion) throws InvalidHeaderException {
+        try {
+            return Double.parseDouble(serverVersion);
+        } catch (NumberFormatException e) {
+            throw new InvalidHeaderException("Invalid server version.");
         }
     }
 

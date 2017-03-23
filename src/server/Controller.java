@@ -83,6 +83,17 @@ public class Controller {
 
             try {
                 String[] headerFields = parseHeader(byteArrayInputStream).split(" ");
+                double serverVersion = parseServerVersion(headerFields[1]);
+                int senderId = parseSenderId(headerFields[2]);
+                checkFileIdValidity(headerFields[3]);
+
+                int chunkNo = 0;
+                int replicationDegree = 0;
+                if (headerFields.length > 4) {
+                    chunkNo = parseChunkNo(headerFields[4]);
+                    if (headerFields.length > 5)
+                        replicationDegree = parseReplicationDegree(headerFields[5]);
+                }
 
                 if (headerFields.length < 3)
                     throw new InvalidHeaderException("A valid messaging header requires at least 3 fields.");
@@ -92,25 +103,25 @@ public class Controller {
                         if (headerFields.length != 6)
                             throw new InvalidHeaderException("A chunk backup header must have exactly 6 fields. Received " + headerFields.length + ".");
 
-                        processBackupMessage(byteArrayInputStream, headerFields[2], headerFields[3], headerFields[4], headerFields[5]);
+                        processBackupMessage(byteArrayInputStream, senderId, headerFields[3], chunkNo, replicationDegree);
                         break;
                     case BACKUP_SUCCESS:
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk stored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processStoredMessage(headerFields[3], headerFields[4]);
+                        processStoredMessage(headerFields[3], chunkNo);
                         break;
                     case RESTORE_INIT:
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processGetChunkMessage(headerFields[2], headerFields[3], headerFields[4]);
+                        processGetChunkMessage(senderId, headerFields[3], chunkNo);
                         break;
                     case RESTORE_SUCCESS:
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processRestoredMessage(byteArrayInputStream, headerFields[2], headerFields[3], headerFields[4]);
+                        processRestoredMessage(byteArrayInputStream, senderId, headerFields[3], chunkNo);
                         break;
                     case DELETE_INIT:
 
@@ -133,21 +144,19 @@ public class Controller {
     /**
      * Processes a backup message
      *
-     * @param byteArrayInputStream InputStream containing everything after the end of the header
-     * @param senderId             Sender Id
-     * @param fileId               File Id
-     * @param chunkNoStr           Chunk number as String
-     * @param replicationDegreeStr Replication degree as String
+     * @param byteArrayInputStream     InputStream containing everything after the end of the header
+     * @param senderId                 Sender Id
+     * @param fileId                   File Id
+     * @param chunkNo                  Chunk number
+     * @param desiredReplicationDegree Replication degree
      * @throws InvalidHeaderException In case of malformed header arguments.
      * @throws IOException            In case of error storing the received chunk.
      */
-    private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, String senderId, String fileId, String chunkNoStr, String replicationDegreeStr) throws InvalidHeaderException, IOException {
-        if (Integer.parseInt(senderId) == getServerId()) // Same sender
+    private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, int senderId, String fileId, int chunkNo, int desiredReplicationDegree) throws InvalidHeaderException, IOException {
+        if (senderId == getServerId()) // Same sender
             return;
 
         checkFileIdValidity(fileId);
-        int chunkNo = parseChunkNo(chunkNoStr);
-        int desiredReplicationDegree = parseReplicationDegree(replicationDegreeStr);
 
         desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
 
@@ -161,7 +170,7 @@ public class Controller {
                 chunkPath.toFile().delete();
 
             Files.copy(byteArrayInputStream, chunkPath, StandardCopyOption.REPLACE_EXISTING);
-            System.out.println("Stored chunk " + chunkNoStr + " of fileId " + fileId + ".");
+            System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
         } catch (IOException e) {
             System.err.println("Could not create file to store chunk. Discarding...");
             e.printStackTrace();
@@ -174,34 +183,29 @@ public class Controller {
         controlChannel.sendMessageWithRandomDelay(
                 MessageBuilder.createMessage(
                         Server.BACKUP_SUCCESS,
-                        getProtocolVersion(),
+                        Double.toString(getProtocolVersion()),
                         Integer.toString(getServerId()),
                         fileId,
-                        chunkNoStr),
+                        Integer.toString(chunkNo)),
                 BACKUP_REPLY_MIN_DELAY,
                 BACKUP_REPLY_MAX_DELAY);
     }
 
-    private void processStoredMessage(String fileId, String chunkNoStr) throws InvalidHeaderException {
-        checkFileIdValidity(fileId);
-        int chunkNo = parseChunkNo(chunkNoStr);
+    private void processStoredMessage(String fileId, int chunkNo) throws InvalidHeaderException {
         incrementReplicationDegree(fileId, chunkNo);
     }
 
-    private void processGetChunkMessage(String senderId, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
-        if (Integer.parseInt(senderId) == getServerId()) // Same sender
+    private void processGetChunkMessage(int senderId, String fileId, int chunkNo) throws InvalidHeaderException, IOException {
+        if (senderId == getServerId()) // Same sender
             return;
 
-        System.out.println("Requested chunk number " + chunkNoStr + " of fileId " + fileId + ".");
+        System.out.println("Requested chunk number " + chunkNo + " of fileId " + fileId + ".");
 
         /* If the requested chunk is not stored in our server, then do nothing. */
-        if (!storedChunks.contains(fileId + chunkNoStr)) {
-            System.out.println("Chunk number" + chunkNoStr + " of fileId " + fileId + " is not stored in this server.");
+        if (!storedChunks.contains(fileId + chunkNo)) {
+            System.out.println("Chunk number" + chunkNo + " of fileId " + fileId + " is not stored in this server.");
             return;
         }
-
-        checkFileIdValidity(fileId);
-        int chunkNo = parseChunkNo(chunkNoStr);
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
@@ -209,33 +213,31 @@ public class Controller {
         byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunkNo));
 
         executorService.schedule(() -> {
-            System.out.println("Retrieving chunk " + chunkNoStr + " of fileId " + fileId + "...");
+            System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
 
             controlChannel.sendMessage(
                     MessageBuilder.createMessage(
                             chunkBody,
                             Server.RESTORE_SUCCESS,
-                            getProtocolVersion(),
+                            Double.toString(getProtocolVersion()),
                             Integer.toString(getServerId()),
                             fileId,
-                            chunkNoStr));
+                            "" + chunkNo));
         }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
-    private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, String serverId, String fileId, String chunkNoStr) throws InvalidHeaderException, IOException {
-        if (Integer.parseInt(serverId) == getServerId()) //Same sender
+    private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, int serverId, String fileId, int chunkNo) throws InvalidHeaderException, IOException {
+        if (serverId == getServerId()) //Same sender
             return;
 
-        System.out.println("Received " + RESTORE_SUCCESS + " from " + serverId + " for fileId " + fileId + " and chunk number " + chunkNoStr);
+        System.out.println("Received " + RESTORE_SUCCESS + " from " + serverId + " for fileId " + fileId + " and chunk number " + chunkNo);
 
-        checkFileIdValidity(fileId);
-        int chunkNo = parseChunkNo(chunkNoStr);
         RecoverFile recover = ongoingRecoveries.get(fileId);
         ScheduledExecutorService chunkToSend = chunksToSend.get(getChunkId(fileId, chunkNo));
 
         /* If there is a chunk waiting to be sent, then delete it */
         if (chunkToSend != null) {
-            System.out.println("Received " + RESTORE_SUCCESS + " for fileId " + fileId + " chunk number " + chunkNoStr + ". Discarding...");
+            System.out.println("Received " + RESTORE_SUCCESS + " for fileId " + fileId + " chunk number " + chunkNo + ". Discarding...");
             chunkToSend.shutdownNow();
             chunksToSend.remove(getChunkId(fileId, chunkNo));
         }

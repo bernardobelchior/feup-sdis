@@ -1,8 +1,8 @@
 package server.protocol;
 
+import server.Controller;
 import server.Server;
 import server.Utils;
-import server.Controller;
 import server.messaging.MessageBuilder;
 
 import javax.xml.bind.DatatypeConverter;
@@ -36,6 +36,7 @@ public class BackupFile {
     public void start(Controller controller, ConcurrentHashMap<Integer, Integer> chunksReplicationDegree) {
         this.controller = controller;
         this.chunksReplicationDegree = chunksReplicationDegree;
+
 
         FileInputStream inputStream;
         try {
@@ -75,9 +76,10 @@ public class BackupFile {
 
             int attempts = 0;
             do {
-                byte[] message = MessageBuilder.createMessage(effectiveChunk,
+                byte[] message = MessageBuilder.createMessage(
+                        effectiveChunk,
                         Server.BACKUP_INIT,
-                        getProtocolVersion(),
+                        Double.toString(getProtocolVersion()),
                         Integer.toString(getServerId()),
                         fileId,
                         Integer.toString(chunkNo),

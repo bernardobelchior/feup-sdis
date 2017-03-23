@@ -44,14 +44,14 @@ public class Server {
     public static final String RESTORED_DIR = "RestoredFiles/";
     public static String BASE_DIR;
 
-    private static String protocolVersion;
+    private static double protocolVersion;
     private static int serverId;
 
     public static void main(String[] args) {
         /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
 
-        protocolVersion = args[0];
+        protocolVersion = Double.parseDouble(args[0]);
         serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
 
@@ -82,7 +82,7 @@ public class Server {
         }
     }
 
-    public static String getProtocolVersion() {
+    public static double getProtocolVersion() {
         return protocolVersion;
     }
 

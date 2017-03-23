@@ -59,7 +59,13 @@ public class RecoverFile {
 
     private void requestChunk(int chunkNo) {
         new Thread(() -> {
-            byte[] message = MessageBuilder.createMessage(Server.RESTORE_INIT, getProtocolVersion(), Integer.toString(getServerId()), fileId, Integer.toString(chunkNo));
+            byte[] message = MessageBuilder.createMessage(
+                    Server.RESTORE_INIT,
+                    Double.toString(getProtocolVersion()),
+                    Integer.toString(getServerId()),
+                    fileId,
+                    Integer.toString(chunkNo));
+
             controller.sendToRecoveryChannel(message);
 
             /*do {
