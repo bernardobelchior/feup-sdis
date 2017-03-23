@@ -1,8 +1,8 @@
 #!/bin/bash
 
-if [ "$#" -lt 2 ]; then
+if [ "$#" -lt 1 ]; then
 	echo 'Wrong number of arguments. Usage:'
-	echo 'sh test.sh <path-to-compiled-module> <operation> <operand1> <operand2>'
+	echo 'sh test.sh <path-to-compiled-module>'
 	exit 1;
 fi
 
@@ -36,11 +36,8 @@ eval $terminal "\"java server.Server 1.0 1 1 224.0.0.0 4445 224.0.0.1 4446 224.0
 echo "Launching server 2..."
 eval $terminal "\"java server.Server 1.0 2 2 224.0.0.0 4445 224.0.0.1 4446 224.0.0.2 4447; read\" &"
 
-sleep 1 #To be sure that the servers are all running
-
-#Client
-echo "Launching client..."
-eval $terminal "\"java client.TestApp 1 $2 $3 $4; read\" &"
+echo "Launching server 3..."
+eval $terminal "\"java server.Server 1.0 3 3 224.0.0.0 4445 224.0.0.1 4446 224.0.0.2 4447; read\" &"
 
 wait
 

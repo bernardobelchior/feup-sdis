@@ -1,8 +1,14 @@
 package server;
 
+import java.io.File;
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Random;
+
+import static server.Server.BASE_DIR;
 
 /**
  * Utilities class.
@@ -94,4 +100,45 @@ public class Utils {
             throw new InvalidHeaderException("Invalid Sender Id " + senderId);
         }
     }
+
+    /**
+     * Returns a random int between min and max.
+     *
+     * @param min Lower bound
+     * @param max Upper bound
+     * @return Random number in the specified interval.
+     */
+    public static int randomBetween(int min, int max) {
+        return new Random().nextInt(max - min) + min;
+    }
+
+    /**
+     * Gets Path to file and creates it.
+     *
+     * @param fileId  File Id
+     * @param chunkNo Chunk number
+     * @return Path to file.
+     * @throws IOException
+     */
+    public static Path getChunkPath(String fileId, int chunkNo) throws IOException {
+        return getFile(fileId + chunkNo).toPath();
+    }
+
+    /**
+     * Gets file with filepath and its parent directories and takes in account the BASE_DIR.
+     *
+     * @param filepath Path to file.
+     * @return File
+     * @throws IOException
+     */
+    public static File getFile(String filepath) throws IOException {
+        File file = new File(BASE_DIR + filepath);
+
+        if (file.getParentFile() != null)
+            file.getParentFile().mkdirs();
+
+        return file;
+    }
+
+
 }

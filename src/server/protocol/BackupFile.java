@@ -17,6 +17,8 @@ import static server.Server.*;
 
 public class BackupFile {
     private final String filename;
+
+
     private final int desiredReplicationDegree;
     private final String fileId;
     private final File file;
@@ -47,12 +49,18 @@ public class BackupFile {
         try {
             int chunkNo = 0;
             int bytesRead;
+            int oldBytesRead = 0;
             byte[] chunk = new byte[CHUNK_SIZE];
             while ((bytesRead = inputStream.read(chunk)) != -1) {
                 backupChunk(chunkNo, chunk, bytesRead);
                 chunkNo++;
                 chunk = new byte[CHUNK_SIZE];
+                oldBytesRead = bytesRead;
             }
+
+            if (oldBytesRead == CHUNK_SIZE)
+                backupChunk(chunkNo, chunk, 0);
+
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -66,7 +74,6 @@ public class BackupFile {
                 effectiveChunk = Arrays.copyOf(chunk, size);
 
             int attempts = 0;
-            int currentReplicationDegree;
             do {
                 byte[] message = MessageBuilder.createMessage(effectiveChunk,
                         Server.BACKUP_INIT,
@@ -85,7 +92,12 @@ public class BackupFile {
                 }
                 attempts++;
             }
-            while (chunksReplicationDegree.get(chunkNo) < desiredReplicationDegree && attempts < Server.MAX_BACKUP_ATTEMPTS);
+            while (chunksReplicationDegree.getOrDefault(chunkNo, 0) < desiredReplicationDegree && attempts < Server.MAX_BACKUP_ATTEMPTS);
+
+            if (attempts >= Server.MAX_BACKUP_ATTEMPTS)
+                System.out.println("Max backup attempts reached. Stopping backup process...");
+            else
+                System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + chunksReplicationDegree.getOrDefault(chunkNo, 0) + ".");
         }).start();
     }
 
@@ -101,5 +113,9 @@ public class BackupFile {
 
     public String getFileId() {
         return fileId;
+    }
+
+    public int getDesiredReplicationDegree() {
+        return desiredReplicationDegree;
     }
 }

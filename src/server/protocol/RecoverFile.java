@@ -1,64 +1,80 @@
 package server.protocol;
 
-import server.Server;
 import server.Controller;
+import server.Server;
 import server.messaging.MessageBuilder;
 
-import java.io.*;
-import java.nio.file.Path;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static server.Server.*;
+import static server.Utils.getFile;
 
 public class RecoverFile {
     private final String filename;
     private final String fileId;
     private Controller controller;
-    private int numChunks;
     private ConcurrentHashMap<Integer, byte[]> receivedChunks;
+    private int currentChunk = 0;
+    private static final int CHUNKS_PER_REQUEST = 5;
+    private static final int WAIT_FOR_CHUNKS = 500;
 
     public RecoverFile(String filename, String fileId) {
         this.filename = filename;
         this.fileId = fileId;
+        receivedChunks = new ConcurrentHashMap<>();
     }
 
 
-    public void start(Controller controller) throws FileNotFoundException {
+    public void start(Controller controller) {
         this.controller = controller;
 
-        /* If numChunks == 0, then the file is not backed up in the network */
-        numChunks = controller.getNumChunks(fileId);
+        while (!isLastChunk()) {
+            System.out.println("Requesting chunks " + currentChunk + " to " + (currentChunk + CHUNKS_PER_REQUEST - 1) + " for fileId " + fileId + "...");
 
-        if (numChunks == 0)
-            throw new FileNotFoundException("File not found in the network.");
+            /* Requests CHUNKS_PER_REQUEST chunks at a time where i is the chunk number. */
+            for (int i = currentChunk; i < currentChunk + CHUNKS_PER_REQUEST; i++)
+                requestChunk(i);
 
-        receivedChunks = new ConcurrentHashMap<>(numChunks);
+            currentChunk += CHUNKS_PER_REQUEST;
 
-        for (int chunkNo = 0; chunkNo < numChunks; chunkNo++)  /* TODO: Afterwards, do not ask for all chunks at once.*/
-            requestChunk(chunkNo);
+            while (receivedChunks.size() < currentChunk && !isLastChunk()) {
+                System.out.println("Waiting for other chunks...");
+                try {
+                    Thread.sleep(WAIT_FOR_CHUNKS);
+                } catch (InterruptedException ignored) {
+                }
+            }
+        }
+
+        System.out.println("All chunks received. Starting file reconstruction...");
+        recoverFile();
+    }
+
+    private boolean isLastChunk() {
+        byte[] chunk = receivedChunks.get(receivedChunks.size() - 1); // Get last chunk
+        return chunk != null && chunk.length < CHUNK_SIZE; // If the chunk does not exist or is less than CHUNK_SIZE
     }
 
     private void requestChunk(int chunkNo) {
         new Thread(() -> {
             byte[] message = MessageBuilder.createMessage(Server.RESTORE_INIT, getProtocolVersion(), Integer.toString(getServerId()), fileId, Integer.toString(chunkNo));
-            do {
-                controller.sendToRecoveryChannel(message);
+            controller.sendToRecoveryChannel(message);
+
+            /*do {
                 try {
-                    Thread.sleep(RESTORE_REPLY_DELAY);
+                    Thread.sleep(RESTORE_TIMEOUT);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-            }
-            while (receivedChunks.get(chunkNo) == null);
+            } while (receivedChunks.get(chunkNo) == null);*/
 
         }).start();
     }
 
     public void putChunk(int chunkNo, byte[] chunk) {
         receivedChunks.put(chunkNo, chunk);
-
-        if (receivedChunks.size() == numChunks)
-            recoverFile();
     }
 
     private void recoverFile() {
@@ -66,13 +82,13 @@ public class RecoverFile {
         new Thread(() -> {
             FileOutputStream fileOutputStream;
             try {
-                fileOutputStream = new FileOutputStream(getFilePath() + "/" + filename);
-            } catch (FileNotFoundException e) {
+                fileOutputStream = new FileOutputStream(getFile(RESTORED_DIR + filename));
+            } catch (IOException e) {
                 e.printStackTrace();
                 return;
             }
 
-            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++){
+            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++) {
                 try {
                     //Not Working
                     fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
@@ -80,22 +96,12 @@ public class RecoverFile {
                     e.printStackTrace();
                 }
             }
+
+            System.out.println("File succesfully restored.");
         }).start();
     }
 
     public String getFileId() {
         return fileId;
-    }
-
-    public Path getFilePath(){
-
-        File file = new File( getServerId()+ "/RestoredFiles");
-
-        if(!file.exists()){
-            file.mkdirs();
-        }
-
-        return file.toPath();
-
     }
 }

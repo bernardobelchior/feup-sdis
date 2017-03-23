@@ -14,13 +14,15 @@ public class Server {
     public static final String BACKUP_SUCCESS = "STORED";
     public static final int BACKUP_TIMEOUT = 1000;
     public static final int MAX_BACKUP_ATTEMPTS = 5;
-    public static final int BACKUP_REPLY_DELAY = 400;
+    public static final int BACKUP_REPLY_MIN_DELAY = 0;
+    public static final int BACKUP_REPLY_MAX_DELAY = 400;
 
     // Chunk Restore
     public static final String RESTORE_INIT = "GETCHUNK";
     public static final String RESTORE_SUCCESS = "CHUNK";
     public static final int RESTORE_TIMEOUT = 1000;
-    public static final int RESTORE_REPLY_DELAY = 400;
+    public static final int RESTORE_REPLY_MIN_DELAY = 0;
+    public static final int RESTORE_REPLY_MAX_DELAY = 400;
 
 
     // File Deletion
@@ -39,6 +41,9 @@ public class Server {
     public static final int MAX_HEADER_SIZE = 512;
     public static final int CHUNK_SIZE = 64 * 1000;
 
+    public static final String RESTORED_DIR = "RestoredFiles/";
+    public static final String BASE_DIR = Integer.toString(getServerId()) + "/";
+
     private static String protocolVersion;
     private static int serverId;
 
@@ -49,6 +54,9 @@ public class Server {
         protocolVersion = args[0];
         serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
+
+        System.out.println("Starting server with id " + serverId + ".");
+        System.out.println("Access Point: " + serviceAccessPoint);
 
         Channel controlChannel = new Channel(args[3], args[4]);
         Channel backupChannel = new Channel(args[5], args[6]);
