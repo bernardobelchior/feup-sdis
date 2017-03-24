@@ -9,9 +9,11 @@ import server.protocol.RecoverFile;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -147,8 +149,7 @@ public class Controller {
                         if (headerFields.length != 4)
                             throw new InvalidHeaderException("A file delete header must have exactly 4 fields. Received " + headerFields.length + ".");
 
-                        System.out.println("Received " + DELETE_INIT + "from" + headerFields[2] + "for fileId" + headerFields[3]);
-                        processDeleteMessage(headerFields[3]);
+                        processDeleteMessage(senderId, headerFields[3]);
                         break;
                     case RECLAIM_INIT: //TODO: Define implementation
                         break;
@@ -204,12 +205,12 @@ public class Controller {
         Set<Integer> chunkNoSet;
 
         /* If server already has a set for that fileId, adds the new chunkNo, other way creates a new Set */
-        if(storedChunks.containsKey(fileId))
+        if (storedChunks.containsKey(fileId))
             chunkNoSet = storedChunks.get(fileId);
         else chunkNoSet = new HashSet<>();
 
         chunkNoSet.add(chunkNo);
-        storedChunks.put(fileId,chunkNoSet);
+        storedChunks.put(fileId, chunkNoSet);
 
         incrementReplicationDegree(fileId, chunkNo);
 
@@ -235,7 +236,7 @@ public class Controller {
         System.out.println("Requested chunk number " + chunkNo + " of fileId " + fileId + ".");
 
         /* If the requested chunk is not stored in our server, then do nothing. */
-        if(!storedChunks.get(fileId).contains(chunkNo)){
+        if (!storedChunks.get(fileId).contains(chunkNo)) {
             System.out.println("But the chunk is not stored in this server.");
             return;
         }
@@ -286,11 +287,26 @@ public class Controller {
         recover.putChunk(chunkNo, chunkBody);
     }
 
-    private void processDeleteMessage(String fileId) throws InvalidHeaderException {
-       // fileChunkMap.remove(fileId);
-        //desiredReplicationDegreesMap.remove(fileId);
-        //storedChunks.remove(fileId);
+    private void processDeleteMessage(int serverId, String fileId) throws InvalidHeaderException, IOException {
+        if (serverId == getServerId())  //Same sender
+            return;
 
+        if (!storedChunks.containsKey(fileId))
+            return;
+
+        System.out.println("Received " + DELETE_INIT + " from " + serverId + " for file " + fileId);
+
+        Iterator iterator = storedChunks.get(fileId).iterator();
+
+        while (iterator.hasNext()) {
+            int chunkNo = (Integer) iterator.next();
+            Path path = Paths.get(getServerId() + "/" + getChunkId(fileId, chunkNo));
+            Files.delete(path);
+        }
+
+        storedChunks.remove(fileId);
+        desiredReplicationDegreesMap.remove(fileId);
+        fileChunkMap.remove(fileId);
     }
 
 
