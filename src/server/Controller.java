@@ -9,11 +9,8 @@ import server.protocol.RecoverFile;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
-import java.util.Collections;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -44,6 +41,10 @@ public class Controller {
 
     /*Server's stored chunks*/
     private ConcurrentHashMap<String, Set<Integer>> storedChunks;
+
+    /* Max storage size allowed */
+    private int storageMaxSize;
+
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
         this.controlChannel = controlChannel;
@@ -296,17 +297,14 @@ public class Controller {
 
         System.out.println("Received " + DELETE_INIT + " from " + serverId + " for file " + fileId);
 
-        Iterator iterator = storedChunks.get(fileId).iterator();
-
-        while (iterator.hasNext()) {
-            int chunkNo = (Integer) iterator.next();
-            Path path = Paths.get(getServerId() + "/" + getChunkId(fileId, chunkNo));
-            Files.delete(path);
-        }
+        for (Integer chunkNo : storedChunks.get(fileId))
+            Files.deleteIfExists(getChunkPath(fileId, chunkNo));
 
         storedChunks.remove(fileId);
         desiredReplicationDegreesMap.remove(fileId);
         fileChunkMap.remove(fileId);
+
+        System.out.println("Successfully deleted file " + fileId);
     }
 
 

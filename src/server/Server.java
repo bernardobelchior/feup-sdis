@@ -42,6 +42,7 @@ public class Server {
     public static final int CHUNK_SIZE = 64 * 1000;
 
     public static final String RESTORED_DIR = "RestoredFiles/";
+    public static final String CHUNK_DIR = "Chunks/";
     public static String BASE_DIR;
 
     private static double protocolVersion;

@@ -12,6 +12,8 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static server.Server.*;
 
@@ -23,6 +25,7 @@ public class BackupFile {
     private final String fileId;
     private final File file;
     private ConcurrentHashMap<Integer, Integer> chunksReplicationDegree;
+    private ExecutorService threadPool = Executors.newFixedThreadPool(5);
 
     private Controller controller;
 
@@ -68,39 +71,40 @@ public class BackupFile {
     }
 
     private void backupChunk(int chunkNo, byte[] chunk, int size) {
-        new Thread(() -> {
-            byte[] effectiveChunk = chunk;
+        threadPool.submit(
+                new Thread(() -> {
+                    byte[] effectiveChunk = chunk;
 
-            if (size != CHUNK_SIZE)
-                effectiveChunk = Arrays.copyOf(chunk, size);
+                    if (size != CHUNK_SIZE)
+                        effectiveChunk = Arrays.copyOf(chunk, size);
 
-            int attempts = 0;
-            do {
-                byte[] message = MessageBuilder.createMessage(
-                        effectiveChunk,
-                        Server.BACKUP_INIT,
-                        Double.toString(getProtocolVersion()),
-                        Integer.toString(getServerId()),
-                        fileId,
-                        Integer.toString(chunkNo),
-                        Integer.toString(desiredReplicationDegree));
+                    int attempts = 0;
+                    do {
+                        byte[] message = MessageBuilder.createMessage(
+                                effectiveChunk,
+                                Server.BACKUP_INIT,
+                                Double.toString(getProtocolVersion()),
+                                Integer.toString(getServerId()),
+                                fileId,
+                                Integer.toString(chunkNo),
+                                Integer.toString(desiredReplicationDegree));
 
-                controller.sendToBackupChannel(message);
+                        controller.sendToBackupChannel(message);
 
-                try {
-                    Thread.sleep(Server.BACKUP_TIMEOUT * 2 ^ attempts);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                attempts++;
-            }
-            while (chunksReplicationDegree.getOrDefault(chunkNo, 0) < desiredReplicationDegree && attempts < Server.MAX_BACKUP_ATTEMPTS);
+                        try {
+                            Thread.sleep(Server.BACKUP_TIMEOUT * 2 ^ attempts);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+                        attempts++;
+                    }
+                    while (chunksReplicationDegree.getOrDefault(chunkNo, 0) < desiredReplicationDegree && attempts < Server.MAX_BACKUP_ATTEMPTS);
 
-            if (attempts >= Server.MAX_BACKUP_ATTEMPTS)
-                System.out.println("Max backup attempts reached. Stopping backup process...");
-            else
-                System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + chunksReplicationDegree.getOrDefault(chunkNo, 0) + ".");
-        }).start();
+                    if (attempts >= Server.MAX_BACKUP_ATTEMPTS)
+                        System.out.println("Max backup attempts reached. Stopping backup process...");
+                    else
+                        System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + chunksReplicationDegree.getOrDefault(chunkNo, 0) + ".");
+                }));
     }
 
     /**

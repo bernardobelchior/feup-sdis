@@ -9,6 +9,7 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 
 import static server.Server.BASE_DIR;
+import static server.Server.CHUNK_DIR;
 
 /**
  * Utilities class.
@@ -135,7 +136,7 @@ public class Utils {
      * @throws IOException
      */
     public static Path getChunkPath(String fileId, int chunkNo) throws IOException {
-        return getFile(fileId + chunkNo).toPath();
+        return getFile(CHUNK_DIR + fileId + chunkNo).toPath();
     }
 
     /**

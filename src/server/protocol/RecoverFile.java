@@ -67,6 +67,7 @@ public class RecoverFile {
 
             controller.sendToRecoveryChannel(message);
 
+            //TODO:
             /*do {
                 try {
                     Thread.sleep(RESTORE_TIMEOUT);
@@ -83,7 +84,6 @@ public class RecoverFile {
     }
 
     private void recoverFile() {
-
         new Thread(() -> {
             FileOutputStream fileOutputStream;
             try {
@@ -95,7 +95,6 @@ public class RecoverFile {
 
             for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++) {
                 try {
-                    //Not Working
                     fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
                 } catch (IOException e) {
                     e.printStackTrace();
