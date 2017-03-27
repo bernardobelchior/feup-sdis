@@ -42,8 +42,8 @@ public class Controller {
     /*Server's stored chunks*/
     private ConcurrentHashMap<String, Set<Integer>> storedChunks;
 
-    /* Max storage size allowed */
-    private int storageMaxSize;
+    /* Max storage size allowed, in bytes */
+    private int maxStorageSize = 1000 ^ 2 * 8; // 8 Megabytes
 
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
