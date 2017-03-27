@@ -63,7 +63,7 @@ public class TestApp {
                 break;
             case "STATE":
                 try {
-                    initiatorPeer.state();
+                    System.out.println(initiatorPeer.state());
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }

@@ -56,8 +56,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
 
     @Override
     public String state() throws RemoteException {
-        System.out.println("State");
-        return null;
+        return controller.getState();
     }
 
     /**

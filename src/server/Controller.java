@@ -1,5 +1,6 @@
 package server;
 
+import javafx.util.Pair;
 import server.messaging.Channel;
 import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
@@ -10,7 +11,9 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -43,7 +46,9 @@ public class Controller {
     private ConcurrentHashMap<String, Set<Integer>> storedChunks;
 
     /* Max storage size allowed, in bytes */
-    private int maxStorageSize = 1000 ^ 2 * 8; // 8 Megabytes
+    private int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
+
+    private ArrayList<Pair<String, String>> backedUpFiles = new ArrayList<>();
 
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
@@ -319,6 +324,7 @@ public class Controller {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         fileChunkMap.put(backupFile.getFileId(), chunksReplicationDegree);
         desiredReplicationDegreesMap.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
+        backedUpFiles.add(new Pair<>(backupFile.getFilename(), backupFile.getFileId()));
 
         backupFile.start(this, chunksReplicationDegree);
     }
@@ -392,5 +398,63 @@ public class Controller {
 
     private String getChunkId(String fileId, int chunkNo) {
         return fileId + chunkNo;
+    }
+
+    public String getState() {
+        StringBuilder sb = new StringBuilder();
+
+        sb.append("Backed up files");
+        for (Pair<String, String> file : backedUpFiles) {
+            sb.append("\n\tPathname: ");
+            sb.append(file.getKey());
+
+            sb.append("\n\tFile Id: ");
+            sb.append(file.getValue());
+
+            sb.append("\n\tDesired Replication Degree: ");
+            sb.append(desiredReplicationDegreesMap.get(file.getValue()));
+
+            for (Map.Entry<Integer, Integer> chunk : fileChunkMap.get(file.getValue()).entrySet()) {
+                sb.append("\n\t\tChunk No: ");
+                sb.append(chunk.getKey());
+                sb.append("\n\t\tReplication Degree: ");
+                sb.append(chunk.getValue());
+            }
+        }
+
+        sb.append("\n\n");
+        sb.append("Stored chunks");
+
+        for (Map.Entry<String, Set<Integer>> fileChunk : storedChunks.entrySet()) {
+            sb.append("\n\tFile Id: ");
+            sb.append(fileChunk.getKey());
+
+            for (Integer chunkNo : fileChunk.getValue()) {
+                sb.append("\n\t\tChunk No: ");
+                sb.append(chunkNo);
+
+                sb.append("\n\t\t\tSize: ");
+                try {
+                    sb.append(Files.size(getChunkPath(fileChunk.getKey(), chunkNo)) / 1000);
+                    sb.append(" KB");
+                } catch (IOException e) {
+                    sb.append("Could not open chunk.");
+                    e.printStackTrace();
+                }
+
+                sb.append("\n\t\t\tReplication degree: ");
+                sb.append(fileChunkMap.get(fileChunk.getKey()).getOrDefault(chunkNo, 0));
+            }
+        }
+
+        sb.append("\n\n\nMaximum Storage Size: ");
+        sb.append(maxStorageSize / 1000);
+        sb.append(" KB");
+
+        sb.append("\nCurrent Space Used: ");
+        sb.append("TODO "); //TODO
+        sb.append("KB");
+
+        return sb.toString();
     }
 }

@@ -121,6 +121,10 @@ public class BackupFile {
         return fileId;
     }
 
+    public String getFilename() {
+        return filename;
+    }
+
     public int getDesiredReplicationDegree() {
         return desiredReplicationDegree;
     }
