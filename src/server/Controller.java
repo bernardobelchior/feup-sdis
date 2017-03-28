@@ -93,10 +93,7 @@ public class Controller {
      *
      * @param message
      */
-    public void sendDeleteMessage(byte[] message) {
-        controlChannel.sendMessage(message);
-    }
-
+    public void sendToControlChannel(byte[] message) {controlChannel.sendMessage(message);}
     /**
      * Processes the message received asynchronously.
      *
@@ -156,10 +153,11 @@ public class Controller {
 
                         processDeleteMessage(senderId, headerFields[3]);
                         break;
-                    case RECLAIM_INIT: //TODO: Define implementation
-                        break;
                     case RECLAIM_SUCESS:
+                        if (headerFields.length != 5)
+                            throw new InvalidHeaderException("A space reclaiming header must have exactly 5 fields. Received " + headerFields.length + ".");
 
+                        processReclaimMessage(senderId,headerFields[3],chunkNo);
                         break;
                     default:
                         throw new InvalidHeaderException("Unknown header messaging type " + headerFields[0]);
@@ -314,12 +312,28 @@ public class Controller {
         System.out.println("Successfully deleted file " + fileId);
     }
 
+    private void processReclaimMessage(int serverId,String fileId, int chunkNo){
+        if(serverId == getServerId())
+            return;
+
+        if(storedChunks.get(fileId).contains(chunkNo))
+            decrementReplicationDegree(fileId,chunkNo);
+       // if (fileChunkMap.get(fileId).get(chunkNo) < desiredReplicationDegreesMap.get(fileId))
+            //PUTCHUNK
+
+    }
+
 
     private void incrementReplicationDegree(String fileId, int chunkNo) {
         fileChunkMap.putIfAbsent(fileId, new ConcurrentHashMap<>());
 
         ConcurrentHashMap<Integer, Integer> chunks = fileChunkMap.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
+    }
+
+    private void decrementReplicationDegree(String fileId, int chunkNo){
+        ConcurrentHashMap<Integer, Integer> chunks = fileChunkMap.get(fileId);
+        chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) - 1);
     }
 
     public void deleteChunk(String fileId, Integer chunkNo) throws IOException {
@@ -367,6 +381,8 @@ public class Controller {
         deleteFile.start(this);
     }
 
+
+
     public void startReclaim(int storageSize) throws IOException {
 
         if (storageSize > maxStorageSize) {
@@ -399,6 +415,12 @@ public class Controller {
         while (getDirectorySize(BASE_DIR + CHUNK_DIR)> maxStorageSize){
             ChunkReplication unnecessaryChunk = chunkReplicationQueue.poll();
             deleteChunk(unnecessaryChunk.getFileId(), unnecessaryChunk.getChunkNo());
+            controlChannel.sendMessage(
+                    MessageBuilder.createMessage(Server.RECLAIM_SUCESS,
+                            Double.toString(getProtocolVersion()),
+                            Integer.toString(getServerId()),
+                            unnecessaryChunk.getFileId(),
+                            Integer.toString(unnecessaryChunk.getChunkNo())));
         }
 
         //TODO: atualizar replication degree dos outros servidores - Mensagem REMOVED
@@ -525,5 +547,11 @@ public class Controller {
 
         return false;
     }
+
+
+    public int getMaxStorageSize() {
+        return maxStorageSize;
+    }
+
 
 }

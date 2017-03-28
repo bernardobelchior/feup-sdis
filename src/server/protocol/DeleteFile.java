@@ -24,7 +24,7 @@ public class DeleteFile {
     public void start(Controller controller){
         this.controller = controller;
         byte[] message = MessageBuilder.createMessage(Server.DELETE_INIT, Double.toString(getProtocolVersion()), Integer.toString(getServerId()), fileId);
-        this.controller.sendDeleteMessage(message);
+        this.controller.sendToControlChannel(message);
     }
 
     public String getFilename() {
