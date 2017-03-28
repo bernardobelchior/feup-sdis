@@ -188,6 +188,12 @@ public class Controller {
 
         checkFileIdValidity(fileId);
 
+        ScheduledExecutorService chunkToSend = chunksToBackUp.get(getChunkId(fileId, chunkNo));
+        if(chunkToSend!=null){
+            chunkToSend.shutdownNow();
+            chunksToBackUp.remove(getChunkId(fileId,chunkNo));
+        }
+
         desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
 
         /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
