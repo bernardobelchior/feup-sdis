@@ -331,7 +331,9 @@ public class Controller {
         desiredReplicationDegreesMap.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
         backedUpFiles.add(new Pair<>(backupFile.getFilename(), backupFile.getFileId()));
 
-        return backupFile.start(this, chunksReplicationDegree);
+        boolean ret = backupFile.start(this, chunksReplicationDegree);
+        saveServerMetadata();
+        return ret;
     }
 
     public boolean startFileRecovery(RecoverFile recoverFile) {
@@ -342,7 +344,10 @@ public class Controller {
         }
 
         ongoingRecoveries.put(recoverFile.getFileId(), recoverFile);
-        return recoverFile.start(this);
+
+        boolean ret = recoverFile.start(this);
+        saveServerMetadata();
+        return ret;
     }
 
     public void startFileDelete(DeleteFile deleteFile) {
@@ -353,8 +358,15 @@ public class Controller {
         }
 
         deleteFile.start(this);
+        saveServerMetadata();
     }
 
+    /**
+     * Loads server metadata.
+     *
+     * @return True if the metadata was correctly loaded.
+     */
+    @SuppressWarnings("unchecked")
     private boolean loadServerMetadata() {
         ObjectInputStream objectInputStream;
 
@@ -399,10 +411,6 @@ public class Controller {
             System.err.println("Could not write to configuration file.");
             e.printStackTrace();
         }
-    }
-
-    private String getChunkId(String fileId, int chunkNo) {
-        return fileId + chunkNo;
     }
 
     public String getState() {
