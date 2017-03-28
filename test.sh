@@ -1,5 +1,11 @@
 #!/bin/bash
 
+exists()
+{
+	command -v "$1" >/dev/null 2>&1
+}
+
+
 if [ "$#" -lt 1 ]; then
 	echo 'Wrong number of arguments. Usage:'
 	echo 'sh test.sh <path-to-compiled-module>'
@@ -9,9 +15,15 @@ fi
 os=$(uname)
 
 if [ "$os" = "Linux" ]; then ##Figure out how to know terminal name
-	#terminal=$(ps -o 'cmd=' -p $(ps -o 'ppid=' -p $$))
-	#terminal=$(echo $terminal -e sh -c)
-	terminal=$(echo urxvt -e bash -c)
+	if  exists urxvt ; then
+		terminal=$(echo urxvt)
+	elif  exists x-terminal-emulator ; then
+		terminal=$(echo x-terminal-emulator)
+	else
+		exit 1
+	fi
+
+	terminal=$(echo $terminal -e bash -c)
 elif [ "$os" = "Darwin" ]; then
 	terminal=$(echo open -a Terminal)
 else
