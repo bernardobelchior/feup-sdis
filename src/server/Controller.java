@@ -8,6 +8,7 @@ import server.protocol.DeleteFile;
 import server.protocol.RecoverFile;
 
 import java.io.*;
+import java.net.SocketAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -101,10 +102,11 @@ public class Controller {
     /**
      * Processes the message received asynchronously.
      *
-     * @param message Message to process.
-     * @param size    Message size
+     * @param message       Message to process.
+     * @param size          Message size
+     * @param socketAddress
      */
-    public void processMessage(byte[] message, int size) {
+    public void processMessage(byte[] message, int size, SocketAddress sender) {
         new Thread(() -> {
 
             ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message, 0, size);
@@ -143,7 +145,7 @@ public class Controller {
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processGetChunkMessage(senderId, headerFields[3], chunkNo);
+                        processGetChunkMessage(senderId, headerFields[3], chunkNo, sender);
                         break;
                     case RESTORE_SUCCESS:
                         if (headerFields.length != 5)
@@ -233,7 +235,7 @@ public class Controller {
         incrementReplicationDegree(fileId, chunkNo);
     }
 
-    private void processGetChunkMessage(int senderId, String fileId, int chunkNo) throws InvalidHeaderException, IOException {
+    private void processGetChunkMessage(int senderId, String fileId, int chunkNo, SocketAddress sender) throws InvalidHeaderException, IOException {
         if (senderId == getServerId()) // Same sender
             return;
 
@@ -255,14 +257,19 @@ public class Controller {
         executorService.schedule(() -> {
             System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
 
-            controlChannel.sendMessage(
-                    MessageBuilder.createMessage(
-                            chunkBody,
-                            Server.RESTORE_SUCCESS,
-                            Double.toString(getProtocolVersion()),
-                            Integer.toString(getServerId()),
-                            fileId,
-                            "" + chunkNo));
+            byte[] message = MessageBuilder.createMessage(
+                    chunkBody,
+                    Server.RESTORE_SUCCESS,
+                    Double.toString(getProtocolVersion()),
+                    Integer.toString(getServerId()),
+                    fileId,
+                    "" + chunkNo);
+
+            if (getProtocolVersion() > 1)
+                controlChannel.sendMessageTo(message, sender);
+            else
+                controlChannel.sendMessage(message);
+
         }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
@@ -272,7 +279,6 @@ public class Controller {
 
         System.out.println("Received " + RESTORE_SUCCESS + " from " + serverId + " for fileId " + fileId + " and chunk number " + chunkNo);
 
-        RecoverFile recover = ongoingRecoveries.get(fileId);
         ScheduledExecutorService chunkToSend = chunksToSend.get(getChunkId(fileId, chunkNo));
 
         /* If there is a chunk waiting to be sent, then delete it */
@@ -282,6 +288,7 @@ public class Controller {
             chunksToSend.remove(getChunkId(fileId, chunkNo));
         }
 
+        RecoverFile recover = ongoingRecoveries.get(fileId);
         /* If the server is not currently trying to restore the file */
         if (recover == null)
             return;

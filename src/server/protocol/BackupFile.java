@@ -119,7 +119,6 @@ public class BackupFile {
                     } else
                         System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + chunksReplicationDegree.getOrDefault(chunkNo, 0) + ".");
                 }));
-        System.out.println("Thread number " + chunkNo + " submitted.");
     }
 
     /**

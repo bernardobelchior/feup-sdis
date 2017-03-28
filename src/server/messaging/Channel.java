@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
+import java.net.SocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
@@ -66,10 +67,29 @@ public class Channel {
 
         try {
             socket.send(packet);
-        } catch (IOException ignored) { }
+        } catch (IOException ignored) {
+        }
     }
 
+    /**
+     * Sends a message to a specified address and port.
+     *
+     * @param message Message to send.
+     * @param sender  Sender address and port.
+     */
+    public void sendMessageTo(byte[] message, SocketAddress sender) {
+        DatagramPacket packet = new DatagramPacket(message, message.length, sender);
 
+        try {
+            socket.send(packet);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Listens to the socket for messages.
+     */
     public void listen() {
         new Thread(() -> {
             while (true) {
@@ -78,7 +98,7 @@ public class Channel {
 
                 try {
                     socket.receive(packet);
-                    controller.processMessage(packet.getData(), packet.getLength());
+                    controller.processMessage(packet.getData(), packet.getLength(), packet.getSocketAddress());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
