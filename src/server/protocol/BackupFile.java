@@ -11,7 +11,10 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.concurrent.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static server.Server.*;
 
@@ -37,6 +40,13 @@ public class BackupFile {
         fileId = generateFileId();
     }
 
+    /**
+     * Starts the file backup process.
+     *
+     * @param controller              Controller that handles message delivering.
+     * @param chunksReplicationDegree Chunks current replication degree.
+     * @return Returns true if the process is successful, returning false otherwise.
+     */
     public boolean start(Controller controller, ConcurrentHashMap<Integer, Integer> chunksReplicationDegree) {
         this.controller = controller;
         this.chunksReplicationDegree = chunksReplicationDegree;
@@ -84,6 +94,13 @@ public class BackupFile {
 
     }
 
+    /**
+     * Backs up a specific chunk.
+     *
+     * @param chunkNo Chunk number to be backed up.
+     * @param chunk   Chunk content.
+     * @param size    Chunk size.
+     */
     private void backupChunk(int chunkNo, byte[] chunk, int size) {
         threadPool.submit(
                 new Thread(() -> {
@@ -131,14 +148,29 @@ public class BackupFile {
         return DatatypeConverter.printHexBinary(Utils.sha256(bitString));
     }
 
+    /**
+     * Get file id.
+     *
+     * @return file id.
+     */
     public String getFileId() {
         return fileId;
     }
 
+    /**
+     * Get file name.
+     *
+     * @return File name.
+     */
     public String getFilename() {
         return filename;
     }
 
+    /**
+     * Get desired replication degree.
+     *
+     * @return Desired replication degree.
+     */
     public int getDesiredReplicationDegree() {
         return desiredReplicationDegree;
     }

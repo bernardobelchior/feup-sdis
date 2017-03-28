@@ -30,6 +30,12 @@ public class RecoverFile {
         receivedChunks = new ConcurrentHashMap<>();
     }
 
+    /**
+     * Starts the file recovery process.
+     *
+     * @param controller Controller that handles message sending.
+     * @return Returns true if the file has been successfully restored, returning false otherwise.
+     */
     public boolean start(Controller controller) {
         this.controller = controller;
 
@@ -56,9 +62,7 @@ public class RecoverFile {
         }
 
         System.out.println("All chunks received. Starting file reconstruction...");
-        recoverFile();
-
-        return true;
+        return recoverFile();
     }
 
     /**
@@ -99,29 +103,48 @@ public class RecoverFile {
                 }));
     }
 
+    /**
+     * Stores the chunk in memory.
+     *
+     * @param chunkNo Chunk number
+     * @param chunk   Chunk content
+     */
     public void putChunk(int chunkNo, byte[] chunk) {
         receivedChunks.putIfAbsent(chunkNo, chunk);
     }
 
-    private void recoverFile() {
+    /**
+     * Joins all chunks and writes them to a file.
+     *
+     * @return Returns true if the file has been successfully written to.
+     */
+    private boolean recoverFile() {
         FileOutputStream fileOutputStream;
 
         try {
             fileOutputStream = new FileOutputStream(getFile(RESTORED_DIR + filename));
         } catch (IOException e) {
-            e.printStackTrace();
-            return;
+            System.err.println("Error opening file for recovery.");
+            return false;
         }
 
         for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++) {
             try {
                 fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
             } catch (IOException e) {
-                e.printStackTrace();
+                System.err.println("Error writing chunk " + chunkNo + " to file.");
+                return false;
             }
         }
+
+        return true;
     }
 
+    /**
+     * Gets file id.
+     *
+     * @return FileId
+     */
     public String getFileId() {
         return fileId;
     }
