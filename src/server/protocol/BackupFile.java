@@ -1,5 +1,4 @@
 package server.protocol;
-
 import server.Controller;
 import server.Server;
 import server.Utils;

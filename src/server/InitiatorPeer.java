@@ -51,7 +51,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
 
     @Override
     public void reclaim(int spaceReserved) throws RemoteException {
-        System.out.println("Reclaim");
+        controller.startReclaim(spaceReserved);
     }
 
     @Override

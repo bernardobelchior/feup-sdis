@@ -3,6 +3,7 @@ package server;
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -155,5 +156,19 @@ public class Utils {
         return file;
     }
 
+    public static long getDirectorySize(String path) throws IOException {
+        long size = 0;
 
+        File directory = new File(path);
+        if(!directory.exists())
+            return 0;
+
+        File[] files = directory.listFiles();
+        for(File file : files){
+            if(file.isFile())
+                size += Files.size(file.toPath());
+        }
+
+        return size;
+    }
 }
