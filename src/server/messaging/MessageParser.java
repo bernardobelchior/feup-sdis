@@ -7,7 +7,15 @@ import java.io.ByteArrayInputStream;
 import static server.Server.CR;
 import static server.Server.LF;
 
+
 public class MessageParser {
+    /**
+     * Parses the header and returns it as a String.
+     *
+     * @param byteArrayInputStream Stream that represents the message being parsed.
+     * @return Header fields.
+     * @throws InvalidHeaderException In case the header is not proper.
+     */
     public static String parseHeader(ByteArrayInputStream byteArrayInputStream) throws InvalidHeaderException {
         String header = "";
         byte byteRead;

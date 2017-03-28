@@ -157,8 +157,6 @@ public class Controller {
 
                         processDeleteMessage(senderId, headerFields[3]);
                         break;
-                    case RECLAIM_INIT: //TODO: Define implementation
-                        break;
                     case RECLAIM_SUCESS:
 
                         break;
@@ -320,24 +318,24 @@ public class Controller {
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
-    public void startFileBackup(BackupFile backupFile) {
+    public boolean startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         fileChunkMap.put(backupFile.getFileId(), chunksReplicationDegree);
         desiredReplicationDegreesMap.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
         backedUpFiles.add(new Pair<>(backupFile.getFilename(), backupFile.getFileId()));
 
-        backupFile.start(this, chunksReplicationDegree);
+        return backupFile.start(this, chunksReplicationDegree);
     }
 
-    public void startFileRecovery(RecoverFile recoverFile) throws FileNotFoundException {
+    public boolean startFileRecovery(RecoverFile recoverFile) {
         /* If the fileId does not exist in the network */
         if (desiredReplicationDegreesMap.get(recoverFile.getFileId()) == null) {
             System.err.println("File not found in the network.");
-            return;
+            return false;
         }
 
         ongoingRecoveries.put(recoverFile.getFileId(), recoverFile);
-        recoverFile.start(this);
+        return recoverFile.start(this);
     }
 
     public void startFileDelete(DeleteFile deleteFile) {

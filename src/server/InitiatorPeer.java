@@ -7,7 +7,6 @@ import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
@@ -20,25 +19,20 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
     }
 
     @Override
-    public void backup(String filename, int replicationDegree) throws RemoteException {
+    public boolean backup(String filename, int replicationDegree) throws RemoteException {
         System.out.println("Starting backup of file with filename " + filename
                 + " with replication degree of " + replicationDegree + "...");
 
-        controller.startFileBackup(new BackupFile(filename, replicationDegree));
+        return controller.startFileBackup(new BackupFile(filename, replicationDegree));
     }
 
     @Override
-    public void restore(String filename) throws RemoteException {
+    public boolean restore(String filename) throws RemoteException {
         String fileId = generateFileId(filename);
 
         System.out.println("Starting restore of file with fileId " + fileId + "...");
 
-        try {
-            controller.startFileRecovery(new RecoverFile(filename, fileId));
-        } catch (FileNotFoundException e) {
-            System.err.println(e.toString());
-            e.printStackTrace();
-        }
+        return controller.startFileRecovery(new RecoverFile(filename, fileId));
     }
 
     @Override

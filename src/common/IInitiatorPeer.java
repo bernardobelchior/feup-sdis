@@ -9,18 +9,17 @@ import java.rmi.RemoteException;
 public interface IInitiatorPeer extends Remote {
     /**
      * Backs up the file with {@filename} and have at least {@replicationDegree} copies of each chunk at any time.
-     *
-     * @param filename          Name of file to backup.
+     *  @param filename          Name of file to backup.
      * @param replicationDegree Number of copies of each chunk to keep around at any time.
      */
-    void backup(String filename, int replicationDegree) throws RemoteException;
+    boolean backup(String filename, int replicationDegree) throws RemoteException;
 
     /**
      * Restores backed up file with name {@filename}.
      *
      * @param filename Name of file to restore.
      */
-    void restore(String filename) throws RemoteException;
+    boolean restore(String filename) throws RemoteException;
 
     /**
      * Deletes file with name {@filename} from the server network.

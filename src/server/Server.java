@@ -29,7 +29,6 @@ public class Server {
     public static final String DELETE_INIT = "DELETE";
 
     // Space Reclaiming
-    public static final String RECLAIM_INIT = "RECLAIM"; //TODO: Define implementation
     public static final String RECLAIM_SUCESS = "REMOVED";
 
 

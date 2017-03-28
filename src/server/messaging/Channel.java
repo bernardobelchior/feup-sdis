@@ -63,13 +63,10 @@ public class Channel {
      */
     public void sendMessage(byte[] message) {
         DatagramPacket packet = new DatagramPacket(message, message.length, address, port);
-        //System.out.println(new String(message));
 
         try {
             socket.send(packet);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        } catch (IOException ignored) { }
     }
 
 

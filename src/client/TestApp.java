@@ -32,7 +32,10 @@ public class TestApp {
                 pathName = args[2];
                 int replicationDegree = Integer.parseInt(args[3]);
                 try {
-                    initiatorPeer.backup(pathName, replicationDegree);
+                    if (initiatorPeer.backup(pathName, replicationDegree))
+                        System.out.println("File backup successful.");
+                    else
+                        System.out.println("File backup failed.");
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
@@ -40,7 +43,10 @@ public class TestApp {
             case "RESTORE":
                 pathName = args[2];
                 try {
-                    initiatorPeer.restore(pathName);
+                    if (initiatorPeer.restore(pathName))
+                        System.out.println("File successfully restored.");
+                    else
+                        System.out.println("File recovery failed.");
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
