@@ -5,6 +5,11 @@ exists()
 	command -v "$1" >/dev/null 2>&1
 }
 
+launch_server() {
+	id=$(echo $1)
+	echo "Launching server $id..."
+	eval $terminal "\"java server.Server $protocolVersion $id $id $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; read\" &"
+}
 
 if [ "$#" -lt 1 ]; then
 	echo 'Wrong number of arguments. Usage:'
@@ -51,16 +56,10 @@ eval $terminal "\"rmiregistry -J-Djava.rmi.server.codebase=file://$modulePath\" 
 
 sleep 1 #To be sure that the rmiregistry is running
 
-
 # Launch Servers 
-echo "Launching server 1..."
-eval $terminal "\"java server.Server $protocolVersion 1 1 $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; read\" &"
-
-echo "Launching server 2..."
-eval $terminal "\"java server.Server $protocolVersion 2 2 $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; read\" &"
-
-echo "Launching server 3..."
-eval $terminal "\"java server.Server $protocolVersion 3 3 $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; read\" &"
+launch_server "1"
+launch_server "2"
+launch_server "3"
 
 wait
 

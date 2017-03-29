@@ -15,13 +15,12 @@ import static server.Server.*;
 import static server.Utils.getFile;
 
 public class RecoverFile {
+    private static final int CHUNKS_PER_REQUEST = 10;
     private final String filename;
     private final String fileId;
     private Controller controller;
-    private ConcurrentHashMap<Integer, byte[]> receivedChunks;
+    private final ConcurrentHashMap<Integer, byte[]> receivedChunks;
     private int currentChunk = 0;
-    private static final int CHUNKS_PER_REQUEST = 10;
-
     private ExecutorService threadPool;
 
     public RecoverFile(String filename, String fileId) {
@@ -52,6 +51,9 @@ public class RecoverFile {
             threadPool.shutdown();
             try {
                 if (!threadPool.awaitTermination(CHUNKS_PER_REQUEST / 2, TimeUnit.SECONDS)) {
+                    do {
+                        threadPool.shutdownNow();
+                    } while (!threadPool.isTerminated());
                     System.out.println("Timeout waiting for chunks " + (currentChunk - CHUNKS_PER_REQUEST) + " to " + (currentChunk - 1) + ".");
                     return false;
                 }
@@ -97,9 +99,10 @@ public class RecoverFile {
                         try {
                             Thread.sleep(RESTORE_TIMEOUT);
                         } catch (InterruptedException e) {
-                            e.printStackTrace();
+                            System.out.println("Request for chunk " + chunkNo + " timed out.");
+                            return;
                         }
-                    } while (receivedChunks.get(chunkNo) == null && !receivedAllChunks());
+                    } while (!(receivedChunks.containsKey(chunkNo) || receivedAllChunks()));
                 }));
     }
 
@@ -110,7 +113,8 @@ public class RecoverFile {
      * @param chunk   Chunk content
      */
     public void putChunk(int chunkNo, byte[] chunk) {
-        receivedChunks.putIfAbsent(chunkNo, chunk);
+        receivedChunks.put(chunkNo, chunk);
+        System.out.println("Successfully stored chunk number " + chunkNo + ".");
     }
 
     /**
@@ -147,5 +151,15 @@ public class RecoverFile {
      */
     public String getFileId() {
         return fileId;
+    }
+
+    /**
+     * Checks if the chunk is already stored.
+     *
+     * @param chunkNo Chunk number to check.
+     * @return True if the chunk is already stored.
+     */
+    public boolean hasChunk(int chunkNo) {
+        return receivedChunks.containsKey(chunkNo);
     }
 }

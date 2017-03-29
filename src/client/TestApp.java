@@ -7,24 +7,23 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
-public class TestApp {
-
-    private static IInitiatorPeer initiatorPeer;
-
+class TestApp {
     public static void main(String[] args) {
         /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
 
         String peerAccessPoint = args[0];
-        String operation = args[1];
+        String operation = args[1].toUpperCase();
         String pathName;
+
+        IInitiatorPeer initiatorPeer;
 
         try {
             Registry registry = LocateRegistry.getRegistry("localhost"); //TODO: This is part of peerAcessPoint
             initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
             e.printStackTrace();
-            System.exit(1);
+            return;
         }
 
         switch (operation) {
@@ -74,7 +73,9 @@ public class TestApp {
                     e.printStackTrace();
                 }
                 break;
-
+            default:
+                System.out.println("Unrecognized option " + operation + ".");
+                break;
         }
 
 

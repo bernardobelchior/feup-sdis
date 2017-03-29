@@ -146,7 +146,7 @@ public class Utils {
      * @return File
      * @throws IOException
      */
-    public static File getFile(String filepath) throws IOException {
+    public static File getFile(String filepath) {
         File file = new File(BASE_DIR + filepath);
 
         if (file.getParentFile() != null)

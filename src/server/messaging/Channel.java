@@ -9,12 +9,11 @@ import java.io.IOException;
 import java.net.DatagramPacket;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
-import java.net.SocketAddress;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class Channel {
-    private MulticastSocket socket;
+    private final MulticastSocket socket;
     private Controller controller;
     private InetAddress address;
     private int port;
@@ -77,8 +76,8 @@ public class Channel {
      * @param message Message to send.
      * @param sender  Sender address and port.
      */
-    public void sendMessageTo(byte[] message, SocketAddress sender) {
-        DatagramPacket packet = new DatagramPacket(message, message.length, sender);
+    public void sendMessageTo(byte[] message, InetAddress senderAddr, int senderPort) {
+        DatagramPacket packet = new DatagramPacket(message, message.length, senderAddr, senderPort);
 
         try {
             socket.send(packet);
@@ -98,7 +97,7 @@ public class Channel {
 
                 try {
                     socket.receive(packet);
-                    controller.processMessage(packet.getData(), packet.getLength(), packet.getSocketAddress());
+                    controller.processMessage(packet.getData(), packet.getLength(), packet.getAddress(), packet.getPort());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
