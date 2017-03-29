@@ -1,6 +1,5 @@
 package server;
 
-import javafx.util.Pair;
 import server.messaging.Channel;
 import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
@@ -12,7 +11,6 @@ import java.net.InetAddress;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -44,7 +42,8 @@ public class Controller {
     /* Max storage size allowed, in bytes */
     private final int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
 
-    private final ArrayList<Pair<String, String>> backedUpFiles = new ArrayList<>();
+    /* Maps FileId to Filename */
+    private final ConcurrentHashMap<String, String> backedUpFiles = new ConcurrentHashMap<>();
 
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
@@ -302,8 +301,9 @@ public class Controller {
     }
 
     private void processDeleteMessage(int serverId, String fileId) throws IOException {
-        if (serverId == getServerId())  //Same sender
-            return;
+        desiredReplicationDegreesMap.remove(fileId);
+        fileChunkMap.remove(fileId);
+        backedUpFiles.remove(fileId);
 
         if (!storedChunks.containsKey(fileId))
             return;
@@ -314,8 +314,6 @@ public class Controller {
             Files.deleteIfExists(getChunkPath(fileId, chunkNo));
 
         storedChunks.remove(fileId);
-        desiredReplicationDegreesMap.remove(fileId);
-        fileChunkMap.remove(fileId);
 
         System.out.println("Successfully deleted file " + fileId);
     }
@@ -332,7 +330,7 @@ public class Controller {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         fileChunkMap.put(backupFile.getFileId(), chunksReplicationDegree);
         desiredReplicationDegreesMap.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
-        backedUpFiles.add(new Pair<>(backupFile.getFilename(), backupFile.getFileId()));
+        backedUpFiles.put(backupFile.getFileId(), backupFile.getFilename());
 
         boolean ret = backupFile.start(this, chunksReplicationDegree);
         saveServerMetadata();
@@ -419,22 +417,23 @@ public class Controller {
         StringBuilder sb = new StringBuilder();
 
         sb.append("Backed up files");
-        for (Pair<String, String> file : backedUpFiles) {
+        for (Map.Entry<String, String> file : backedUpFiles.entrySet()) {
             sb.append("\n\tPathname: ");
-            sb.append(file.getKey());
-
-            sb.append("\n\tFile Id: ");
             sb.append(file.getValue());
 
-            sb.append("\n\tDesired Replication Degree: ");
-            sb.append(desiredReplicationDegreesMap.get(file.getValue()));
+            sb.append("\n\tFile Id: ");
+            sb.append(file.getKey());
 
-            for (Map.Entry<Integer, Integer> chunk : fileChunkMap.get(file.getValue()).entrySet()) {
-                sb.append("\n\t\tChunk No: ");
-                sb.append(chunk.getKey());
-                sb.append("\n\t\tReplication Degree: ");
-                sb.append(chunk.getValue());
-            }
+            sb.append("\n\tDesired Replication Degree: ");
+            sb.append(desiredReplicationDegreesMap.get(file.getKey()));
+
+            if (fileChunkMap.containsKey(file.getKey()))
+                for (Map.Entry<Integer, Integer> chunk : fileChunkMap.get(file.getKey()).entrySet()) {
+                    sb.append("\n\t\tChunk No: ");
+                    sb.append(chunk.getKey());
+                    sb.append("\n\t\tReplication Degree: ");
+                    sb.append(chunk.getValue());
+                }
         }
 
         sb.append("\n\n");
