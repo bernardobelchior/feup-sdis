@@ -8,19 +8,16 @@ import static server.Server.getProtocolVersion;
 import static server.Server.getServerId;
 
 public class DeleteFile {
-    private final String filename;
     private final String fileId;
-    private Controller controller;
 
-    public DeleteFile(String filename, String fileId) {
-        this.filename = filename;
+    public DeleteFile(String fileId) {
         this.fileId = fileId;
     }
 
     public void start(Controller controller) {
-        this.controller = controller;
+        Controller controller1 = controller;
         byte[] message = MessageBuilder.createMessage(Server.DELETE_INIT, Double.toString(getProtocolVersion()), Integer.toString(getServerId()), fileId);
-        this.controller.sendDeleteMessage(message);
+        controller1.sendDeleteMessage(message);
     }
 
     public String getFileId() {

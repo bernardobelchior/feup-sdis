@@ -40,7 +40,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
         String fileId = generateFileId(filename);
         System.out.println("Starting delete of file with fileId " + fileId + "...");
 
-        controller.startFileDelete(new DeleteFile(filename, fileId));
+        controller.startFileDelete(new DeleteFile(fileId));
     }
 
     @Override

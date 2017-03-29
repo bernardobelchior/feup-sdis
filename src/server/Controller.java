@@ -106,7 +106,6 @@ public class Controller {
 
             try {
                 String[] headerFields = parseHeader(byteArrayInputStream).split(" ");
-                double serverVersion = parseServerVersion(headerFields[1]);
                 int senderId = parseSenderId(headerFields[2]);
                 checkFileIdValidity(headerFields[3]);
 
@@ -219,7 +218,7 @@ public class Controller {
 
         controlChannel.sendMessageWithRandomDelay(
                 MessageBuilder.createMessage(
-                        Server.BACKUP_SUCCESS,
+                        BACKUP_SUCCESS,
                         Double.toString(getProtocolVersion()),
                         Integer.toString(getServerId()),
                         fileId,
@@ -253,7 +252,7 @@ public class Controller {
 
         byte[] message = MessageBuilder.createMessage(
                 chunkBody,
-                Server.RESTORE_SUCCESS,
+                RESTORE_SUCCESS,
                 Double.toString(getProtocolVersion()),
                 Integer.toString(getServerId()),
                 fileId,

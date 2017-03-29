@@ -1,7 +1,6 @@
 package server.protocol;
 
 import server.Controller;
-import server.Server;
 import server.messaging.MessageBuilder;
 
 import java.io.FileOutputStream;
@@ -87,7 +86,7 @@ public class RecoverFile {
         threadPool.submit(
                 new Thread(() -> {
                     byte[] message = MessageBuilder.createMessage(
-                            Server.RESTORE_INIT,
+                            RESTORE_INIT,
                             Double.toString(getProtocolVersion()),
                             Integer.toString(getServerId()),
                             fileId,

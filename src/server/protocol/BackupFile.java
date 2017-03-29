@@ -1,7 +1,6 @@
 package server.protocol;
 
 import server.Controller;
-import server.Server;
 import server.Utils;
 import server.messaging.MessageBuilder;
 
@@ -108,7 +107,7 @@ public class BackupFile {
 
             byte[] message = MessageBuilder.createMessage(
                     effectiveChunk,
-                    Server.BACKUP_INIT,
+                    BACKUP_INIT,
                     Double.toString(getProtocolVersion()),
                     Integer.toString(getServerId()),
                     fileId,
@@ -120,15 +119,15 @@ public class BackupFile {
                 controller.sendToBackupChannel(message);
 
                 try {
-                    Thread.sleep(Server.BACKUP_TIMEOUT * 2 ^ attempts);
+                    Thread.sleep(BACKUP_TIMEOUT * 2 ^ attempts);
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
                 attempts++;
             } while (chunksReplicationDegree.getOrDefault(chunkNo, 0) < desiredReplicationDegree
-                    && attempts < Server.MAX_BACKUP_ATTEMPTS);
+                    && attempts < MAX_BACKUP_ATTEMPTS);
 
-            if (attempts >= Server.MAX_BACKUP_ATTEMPTS) {
+            if (attempts >= MAX_BACKUP_ATTEMPTS) {
                 System.out.println("Max backup attempts reached. Stopping backup process...");
                 return false;
             }
