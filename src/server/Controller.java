@@ -1,8 +1,7 @@
 package server;
 
-import com.sun.tools.javac.util.Pair;
-import com.sun.tools.javac.util.StringUtils;
 
+import javafx.util.Pair;
 import server.messaging.Channel;
 import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
@@ -189,9 +188,9 @@ public class Controller {
         checkFileIdValidity(fileId);
 
         ScheduledExecutorService chunkToSend = chunksToBackUp.get(getChunkId(fileId, chunkNo));
-        if(chunkToSend!=null){
+        if (chunkToSend != null) {
             chunkToSend.shutdownNow();
-            chunksToBackUp.remove(getChunkId(fileId,chunkNo));
+            chunksToBackUp.remove(getChunkId(fileId, chunkNo));
         }
 
         desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
@@ -200,8 +199,10 @@ public class Controller {
         if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
-        if (!hasAvailableSpace(fileId, BASE_DIR + CHUNK_DIR, byteArrayInputStream.available()))
+        if (!hasAvailableSpace(fileId, BASE_DIR + CHUNK_DIR, byteArrayInputStream.available())){
+            System.out.println("Impossible to Backup chunkNo " + chunkNo);
             return;
+        }
 
         try {
             Path chunkPath = getChunkPath(fileId, chunkNo);
@@ -324,8 +325,12 @@ public class Controller {
         if (serverId == getServerId())
             return;
 
-        if (storedChunks.get(fileId).contains(chunkNo))
-            decrementReplicationDegree(fileId, chunkNo);
+        System.out.println("Received Reclaim Message... " + chunkNo + " from server " + serverId);
+
+        if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunkNo))
+            return;
+
+        decrementReplicationDegree(fileId, chunkNo);
 
         /* Chunk Replication Degree is greater than the desired Replication Degree for that fileId */
         if (fileChunkMap.get(fileId).get(chunkNo) > desiredReplicationDegreesMap.get(fileId))
@@ -336,19 +341,19 @@ public class Controller {
 
         byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunkNo));
 
-        executorService.schedule(() -> {
-            controlChannel.sendMessage(
-                    MessageBuilder.createMessage(
-                            chunkBody,
-                            Server.BACKUP_INIT,
-                            Double.toString(getProtocolVersion()),
-                            Integer.toString(getServerId()),
-                            fileId,
-                            Integer.toString(chunkNo),
-                            Integer.toString(desiredReplicationDegreesMap.get(fileId))));
+        System.out.println("Ready to start Backup ... ");
 
-        }, randomBetween(RECLAIM_REPLY_MIN_DELAY, RECLAIM_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
-
+        executorService.schedule(() -> controlChannel.sendMessage(
+                MessageBuilder.createMessage(
+                        chunkBody,
+                        Server.BACKUP_INIT,
+                        Double.toString(getProtocolVersion()),
+                        Integer.toString(getServerId()),
+                        fileId,
+                        Integer.toString(chunkNo),
+                        Integer.toString(desiredReplicationDegreesMap.get(fileId)))),
+                randomBetween(RECLAIM_REPLY_MIN_DELAY, RECLAIM_REPLY_MAX_DELAY),
+                TimeUnit.MILLISECONDS);
     }
 
 
@@ -412,10 +417,13 @@ public class Controller {
 
     public void startReclaim(int storageSize) throws IOException {
 
-        if (storageSize > maxStorageSize) {
+        System.out.println("Storage size changed to " + storageSize);
+
+        if (storageSize > maxStorageSize)
             maxStorageSize = storageSize;
-        } else {
+        else {
             maxStorageSize = storageSize;
+            System.out.println("1");
             reclaimSpace();
         }
     }
@@ -425,6 +433,7 @@ public class Controller {
 
         int diff;
         String fileId;
+
         Set<String> keys = storedChunks.keySet();
         Iterator<String> iterator = keys.iterator();
 
@@ -506,15 +515,15 @@ public class Controller {
         sb.append("Backed up files");
         for (Pair<String, String> file : backedUpFiles) {
             sb.append("\n\tPathname: ");
-            sb.append(file.fst);
+            sb.append(file.getKey());
 
             sb.append("\n\tFile Id: ");
-            sb.append(file.snd);
+            sb.append(file.getValue());
 
             sb.append("\n\tDesired Replication Degree: ");
-            sb.append(desiredReplicationDegreesMap.get(file.snd));
+            sb.append(desiredReplicationDegreesMap.get(file.getValue()));
 
-            for (Map.Entry<Integer, Integer> chunk : fileChunkMap.get(file.snd).entrySet()) {
+            for (Map.Entry<Integer, Integer> chunk : fileChunkMap.get(file.getValue()).entrySet()) {
                 sb.append("\n\t\tChunk No: ");
                 sb.append(chunk.getKey());
                 sb.append("\n\t\tReplication Degree: ");
@@ -563,7 +572,6 @@ public class Controller {
             return true;
 
         System.out.println("Server needs more storage size to backup file with fileId " + fileId);
-
         return false;
     }
 

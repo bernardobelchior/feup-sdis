@@ -57,7 +57,7 @@ public class TestApp {
                 int maximumDiskSpace = Integer.parseInt(args[2]);
                 try {
                     initiatorPeer.reclaim(maximumDiskSpace);
-                } catch (RemoteException e) {
+                } catch (java.io.IOException e) {
                     e.printStackTrace();
                 }
                 break;
