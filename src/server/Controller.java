@@ -190,13 +190,19 @@ public class Controller {
         if (senderId == getServerId()) // Same sender
             return;
 
+        /* If the server is backuping this file, it cannot store chunks from this file*/
+        if(backedUpFiles.containsKey(fileId)){
+
+            return;
+        }
+
+
         checkFileIdValidity(fileId);
 
         desiredReplicationDegreesMap.putIfAbsent(fileId, desiredReplicationDegree);
 
         ScheduledExecutorService chunkToSend = chunksToBackUp.get(getChunkId(fileId, chunkNo));
 
-        System.out.println("1");
         /* If there is a PUTCHUNK message waiting to be sent,
          * then discard it because we have already an identical one. */
         if (chunkToSend != null) {
@@ -204,23 +210,19 @@ public class Controller {
             chunksToBackUp.remove(getChunkId(fileId, chunkNo));
         }
 
-        System.out.println("2");
         /* If we have already stored the chunk we just received, then just do nothing. */
         if (storedChunks.containsKey(fileId) && storedChunks.get(fileId).contains(chunkNo))
             return;
 
-        System.out.println("3");
         /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
         if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
-        System.out.println("4");
         if (!hasAvailableSpace(fileId, BASE_DIR + CHUNK_DIR, byteArrayInputStream.available())) {
             System.out.println("Not enough space to backup chunk " + chunkNo + ".");
             return;
         }
 
-        System.out.println("5");
         try {
             Path chunkPath = getChunkPath(fileId, chunkNo);
             if (chunkPath.toFile().exists())
@@ -239,8 +241,6 @@ public class Controller {
 
         chunkNoSet.add(chunkNo);
         storedChunks.putIfAbsent(fileId, chunkNoSet);
-
-        incrementReplicationDegree(fileId, chunkNo);
 
         controlChannel.sendMessageWithRandomDelay(
                 MessageBuilder.createMessage(
@@ -357,6 +357,7 @@ public class Controller {
         /* Chunk Replication Degree is greater than the desired Replication Degree for that fileId */
         if (fileChunkMap.get(fileId).get(chunkNo) > desiredReplicationDegreesMap.get(fileId))
             return;
+
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToBackUp.put(getChunkId(fileId, chunkNo), executorService);
