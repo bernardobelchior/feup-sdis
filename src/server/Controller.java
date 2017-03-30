@@ -44,7 +44,7 @@ public class Controller {
     private ConcurrentHashMap<String, Set<Integer>> storedChunks;
 
     /* Max storage size allowed, in bytes */
-    private final int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
+    private int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
 
     /* Maps FileId to Filename */
     private final ConcurrentHashMap<String, String> backedUpFiles = new ConcurrentHashMap<>();
@@ -468,6 +468,9 @@ public class Controller {
             }
         }
 
+        if(leastNecessaryChunks.isEmpty())
+            return true;
+
         /* Chunk with Replication Degree greater than Desired Replication Degree */
         while (getDirectorySize(BASE_DIR + CHUNK_DIR) > maxStorageSize) {
             ChunkReplication leastNecessaryChunk = leastNecessaryChunks.poll();
@@ -597,9 +600,14 @@ public class Controller {
         return sb.toString();
     }
 
-    public boolean hasAvailableSpace(String fileId, String path, int chunkSize) throws IOException {
-        if (getDirectorySize(path) + (long) chunkSize < maxStorageSize)
-            return true;
+    public boolean hasAvailableSpace(String fileId, String path, int chunkSize) {
+        try {
+            if (getDirectorySize(path) + (long) chunkSize < maxStorageSize)
+                return true;
+        } catch (IOException e) {
+            System.out.println("Unable to calculate directory size ... ");
+            return false;
+        }
 
         System.out.println("Server needs more storage size to backup file with fileId " + fileId);
         return false;

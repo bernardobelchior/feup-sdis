@@ -7,6 +7,7 @@ import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
+import java.io.IOException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
