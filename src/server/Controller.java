@@ -33,18 +33,27 @@ public class Controller {
     private final Channel recoveryChannel;
     /*Concurrent HashMap with fileId and respective RecoverFile object*/
     private final ConcurrentHashMap<String, RecoverFile> ongoingRecoveries = new ConcurrentHashMap<>();
+
     /*Concurrent HashMap with String (fileId + chunkNo) and respective ExecutorService, responsible for schedule processRestoredMessage function*/
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToSend = new ConcurrentHashMap<>();
+
     /*Concurrent HashMap with fileId and Concurrent HashMap with file's chunkNo and respective replication degree*/
     private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> fileChunkMap;
+
     /*Concurrent HashMap with fileId and respective desired Replication Degree*/
     private ConcurrentHashMap<String, Integer> desiredReplicationDegreesMap;
+
+    /*Concurrent HashMap with fileId and respective ExecuterService for chunks prepared to be backed up */
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToBackUp = new ConcurrentHashMap<>();
+
     /*Server's stored chunks*/
     private ConcurrentHashMap<String, Set<Integer>> storedChunks;
 
     /* Max storage size allowed, in bytes */
     private int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
+
+    /* Storage size used to store chunks. Value is updated on backup and delete protocol*/
+    private long usedSpace;
 
     /* Maps FileId to Filename */
     private final ConcurrentHashMap<String, String> backedUpFiles = new ConcurrentHashMap<>();
@@ -54,6 +63,7 @@ public class Controller {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
+        this.usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
 
         if (!loadServerMetadata()) {
             storedChunks = new ConcurrentHashMap<>();
@@ -191,11 +201,8 @@ public class Controller {
             return;
 
         /* If the server is backuping this file, it cannot store chunks from this file*/
-        if(backedUpFiles.containsKey(fileId)){
-
+        if(backedUpFiles.containsKey(fileId))
             return;
-        }
-
 
         checkFileIdValidity(fileId);
 
@@ -218,7 +225,7 @@ public class Controller {
         if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
-        if (!hasAvailableSpace(fileId, BASE_DIR + CHUNK_DIR, byteArrayInputStream.available())) {
+        if (!hasAvailableSpace(fileId, byteArrayInputStream.available())) {
             System.out.println("Not enough space to backup chunk " + chunkNo + ".");
             return;
         }
@@ -253,8 +260,9 @@ public class Controller {
                 BACKUP_REPLY_MAX_DELAY);
     }
 
-    private void processStoredMessage(String fileId, int chunkNo) {
+    private void processStoredMessage(String fileId, int chunkNo) throws IOException {
         incrementReplicationDegree(fileId, chunkNo);
+        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
     }
 
     private void processGetChunkMessage(int senderId, String fileId, int chunkNo, InetAddress senderAddr, int senderPort) throws InvalidHeaderException, IOException {
@@ -340,6 +348,9 @@ public class Controller {
 
         storedChunks.remove(fileId);
 
+        /*Update storage size used to store chunks*/
+        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
+
         System.out.println("Successfully deleted file " + fileId);
     }
 
@@ -404,6 +415,9 @@ public class Controller {
         Files.deleteIfExists(getChunkPath(fileId, chunkNo));
         storedChunks.get(fileId).remove(chunkNo);
 
+        /*Update storage size used to store chunks*/
+        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
+
         System.out.println("Successfully deleted chunkNo " + chunkNo);
     }
 
@@ -445,11 +459,14 @@ public class Controller {
 
 
     public boolean startReclaim(int storageSize) throws IOException {
-        if (storageSize > maxStorageSize) {
-            maxStorageSize = storageSize;
+
+        int storageSizeBytes = storageSize * 1000;
+
+        if (storageSizeBytes > maxStorageSize) {
+            maxStorageSize = storageSizeBytes;
             return true;
         } else {
-            maxStorageSize = storageSize;
+            maxStorageSize = storageSizeBytes;
             return reclaimSpace();
         }
     }
@@ -473,7 +490,7 @@ public class Controller {
             return true;
 
         /* Chunk with Replication Degree greater than Desired Replication Degree */
-        while (getDirectorySize(BASE_DIR + CHUNK_DIR) > maxStorageSize) {
+        while (usedSpace > maxStorageSize) {
             ChunkReplication leastNecessaryChunk = leastNecessaryChunks.poll();
             deleteChunk(leastNecessaryChunk.getFileId(), leastNecessaryChunk.getChunkNo());
             controlChannel.sendMessage(
@@ -595,29 +612,18 @@ public class Controller {
         sb.append(" KB");
 
         sb.append("\nCurrent Space Used: ");
-        sb.append("TODO "); //TODO
-        sb.append("KB");
+        sb.append(usedSpace/ 1000);
+        sb.append(" KB");
 
         return sb.toString();
     }
 
-    public boolean hasAvailableSpace(String fileId, String path, int chunkSize) {
-        try {
-            if (getDirectorySize(path) + (long) chunkSize < maxStorageSize)
-                return true;
-        } catch (IOException e) {
-            System.out.println("Unable to calculate directory size ... ");
-            return false;
-        }
+    public boolean hasAvailableSpace(String fileId, int chunkSize) {
+        if (usedSpace + (long) chunkSize < maxStorageSize)
+            return true;
 
         System.out.println("Server needs more storage size to backup file with fileId " + fileId);
         return false;
     }
-
-
-    public int getMaxStorageSize() {
-        return maxStorageSize;
-    }
-
 
 }

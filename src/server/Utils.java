@@ -156,7 +156,7 @@ public class Utils {
         return file;
     }
 
-    public static long getDirectorySize(String path) throws IOException {
+    public static long getDirectorySize(String path){
         long size = 0;
 
         File directory = new File(path);
@@ -166,7 +166,11 @@ public class Utils {
         File[] files = directory.listFiles();
         for(File file : files){
             if(file.isFile())
-                size += Files.size(file.toPath());
+                try {
+                    size += Files.size(file.toPath());
+                } catch (IOException e) {
+                    return 0;
+                }
         }
 
         return size;
