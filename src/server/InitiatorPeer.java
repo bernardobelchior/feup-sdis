@@ -7,39 +7,32 @@ import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.IOException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
 public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer {
 
-    private Controller controller;
+    private final Controller controller;
 
     public InitiatorPeer(Controller controller) throws RemoteException {
         this.controller = controller;
     }
 
     @Override
-    public void backup(String filename, int replicationDegree) throws RemoteException {
+    public boolean backup(String filename, int replicationDegree) throws RemoteException {
         System.out.println("Starting backup of file with filename " + filename
                 + " with replication degree of " + replicationDegree + "...");
 
-        controller.startFileBackup(new BackupFile(filename, replicationDegree));
+        return controller.startFileBackup(new BackupFile(filename, replicationDegree));
     }
 
     @Override
-    public void restore(String filename) throws RemoteException {
+    public boolean restore(String filename) throws RemoteException {
         String fileId = generateFileId(filename);
 
         System.out.println("Starting restore of file with fileId " + fileId + "...");
 
-        try {
-            controller.startFileRecovery(new RecoverFile(filename, fileId));
-        } catch (FileNotFoundException e) {
-            System.err.println(e.toString());
-            e.printStackTrace();
-        }
+        return controller.startFileRecovery(new RecoverFile(filename, fileId));
     }
 
     @Override
@@ -47,7 +40,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
         String fileId = generateFileId(filename);
         System.out.println("Starting delete of file with fileId " + fileId + "...");
 
-        controller.startFileDelete(new DeleteFile(filename, fileId));
+        controller.startFileDelete(new DeleteFile(fileId));
     }
 
     @Override

@@ -1,24 +1,26 @@
 package server.protocol;
 
 import server.Controller;
-import server.Server;
 import server.messaging.MessageBuilder;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static server.Server.*;
 import static server.Utils.getFile;
 
 public class RecoverFile {
+    private static final int CHUNKS_PER_REQUEST = 10;
     private final String filename;
     private final String fileId;
     private Controller controller;
-    private ConcurrentHashMap<Integer, byte[]> receivedChunks;
+    private final ConcurrentHashMap<Integer, byte[]> receivedChunks;
     private int currentChunk = 0;
-    private static final int CHUNKS_PER_REQUEST = 5;
-    private static final int WAIT_FOR_CHUNKS = 500;
+    private ExecutorService threadPool;
 
     public RecoverFile(String filename, String fileId) {
         this.filename = filename;
@@ -26,10 +28,17 @@ public class RecoverFile {
         receivedChunks = new ConcurrentHashMap<>();
     }
 
-    public void start(Controller controller) {
+    /**
+     * Starts the file recovery process.
+     *
+     * @param controller Controller that handles message sending.
+     * @return Returns true if the file has been successfully restored, returning false otherwise.
+     */
+    public boolean start(Controller controller) {
         this.controller = controller;
 
-        while (!isLastChunk()) {
+        while (!receivedAllChunks()) {
+            threadPool = Executors.newFixedThreadPool(CHUNKS_PER_REQUEST);
             System.out.println("Requesting chunks " + currentChunk + " to " + (currentChunk + CHUNKS_PER_REQUEST - 1) + " for fileId " + fileId + "...");
 
             /* Requests CHUNKS_PER_REQUEST chunks at a time where i is the chunk number. */
@@ -38,74 +47,118 @@ public class RecoverFile {
 
             currentChunk += CHUNKS_PER_REQUEST;
 
-            while (receivedChunks.size() < currentChunk && !isLastChunk()) {
-                System.out.println("Waiting for other chunks...");
-                try {
-                    Thread.sleep(WAIT_FOR_CHUNKS);
-                } catch (InterruptedException ignored) {
+            threadPool.shutdown();
+            try {
+                if (!threadPool.awaitTermination(CHUNKS_PER_REQUEST / 2, TimeUnit.SECONDS)) {
+                    do {
+                        threadPool.shutdownNow();
+                    } while (!threadPool.isTerminated());
+                    System.out.println("Timeout waiting for chunks " + (currentChunk - CHUNKS_PER_REQUEST) + " to " + (currentChunk - 1) + ".");
+                    return false;
                 }
+            } catch (InterruptedException e) {
+                System.out.println("Error waiting for chunks to be received.");
+                return false;
             }
         }
 
         System.out.println("All chunks received. Starting file reconstruction...");
-        recoverFile();
+        return recoverFile();
     }
 
-    private boolean isLastChunk() {
+    /**
+     * Checks if all chunks have been received.
+     *
+     * @return True if all chunks have been received. False otherwise.
+     */
+    private boolean receivedAllChunks() {
         byte[] chunk = receivedChunks.get(receivedChunks.size() - 1); // Get last chunk
-        return chunk != null && chunk.length < CHUNK_SIZE; // If the chunk does not exist or is less than CHUNK_SIZE
+        return chunk != null && chunk.length < CHUNK_SIZE; // If the chunk exists and is less than CHUNK_SIZE
     }
 
+    /**
+     * Requests a chunk and waits either for its retrieval or for all chunks to be received.
+     * Sends a GETCHUNK message periodically.
+     *
+     * @param chunkNo Chunk number to ask for.
+     */
     private void requestChunk(int chunkNo) {
-        new Thread(() -> {
-            byte[] message = MessageBuilder.createMessage(
-                    Server.RESTORE_INIT,
-                    Double.toString(getProtocolVersion()),
-                    Integer.toString(getServerId()),
-                    fileId,
-                    Integer.toString(chunkNo));
+        threadPool.submit(
+                new Thread(() -> {
+                    byte[] message = MessageBuilder.createMessage(
+                            RESTORE_INIT,
+                            Double.toString(getProtocolVersion()),
+                            Integer.toString(getServerId()),
+                            fileId,
+                            Integer.toString(chunkNo));
 
-            controller.sendToRecoveryChannel(message);
+                    do {
+                        controller.sendToRecoveryChannel(message);
 
-            //TODO:
-            /*do {
-                try {
-                    Thread.sleep(RESTORE_TIMEOUT);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            } while (receivedChunks.get(chunkNo) == null);*/
-
-        }).start();
+                        try {
+                            Thread.sleep(RESTORE_TIMEOUT);
+                        } catch (InterruptedException e) {
+                            System.out.println("Request for chunk " + chunkNo + " timed out.");
+                            return;
+                        }
+                    } while (!(receivedChunks.containsKey(chunkNo) || receivedAllChunks()));
+                }));
     }
 
+    /**
+     * Stores the chunk in memory.
+     *
+     * @param chunkNo Chunk number
+     * @param chunk   Chunk content
+     */
     public void putChunk(int chunkNo, byte[] chunk) {
         receivedChunks.put(chunkNo, chunk);
+        System.out.println("Successfully stored chunk number " + chunkNo + ".");
     }
 
-    private void recoverFile() {
-        new Thread(() -> {
-            FileOutputStream fileOutputStream;
+    /**
+     * Joins all chunks and writes them to a file.
+     *
+     * @return Returns true if the file has been successfully written to.
+     */
+    private boolean recoverFile() {
+        FileOutputStream fileOutputStream;
+
+        try {
+            fileOutputStream = new FileOutputStream(getFile(RESTORED_DIR + filename));
+        } catch (IOException e) {
+            System.err.println("Error opening file for recovery.");
+            return false;
+        }
+
+        for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++) {
             try {
-                fileOutputStream = new FileOutputStream(getFile(RESTORED_DIR + filename));
+                fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
             } catch (IOException e) {
-                e.printStackTrace();
-                return;
+                System.err.println("Error writing chunk " + chunkNo + " to file.");
+                return false;
             }
+        }
 
-            for (int chunkNo = 0; chunkNo < receivedChunks.size(); chunkNo++) {
-                try {
-                    fileOutputStream.write(receivedChunks.get(chunkNo), 0, receivedChunks.get(chunkNo).length);
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }
-
-            System.out.println("File succesfully restored.");
-        }).start();
+        return true;
     }
 
+    /**
+     * Gets file id.
+     *
+     * @return FileId
+     */
     public String getFileId() {
         return fileId;
+    }
+
+    /**
+     * Checks if the chunk is already stored.
+     *
+     * @param chunkNo Chunk number to check.
+     * @return True if the chunk is already stored.
+     */
+    public boolean hasChunk(int chunkNo) {
+        return receivedChunks.containsKey(chunkNo);
     }
 }

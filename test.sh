@@ -18,7 +18,7 @@ if [ "$#" -lt 1 ]; then
 fi
 
 os=$(uname)
-protocolVersion=$(echo 1.1)
+protocolVersion=$(echo 1.0)
 mcAddr=$(echo 224.0.0.0)
 mcPort=$(echo 4445)
 mdbAddr=$(echo 224.0.0.1)

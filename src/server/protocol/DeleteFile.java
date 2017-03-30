@@ -7,28 +7,17 @@ import server.messaging.MessageBuilder;
 import static server.Server.getProtocolVersion;
 import static server.Server.getServerId;
 
-/**
- * Created by mariajoaomirapaulo on 23/03/17.
- */
 public class DeleteFile {
+    private final String fileId;
 
-    private String filename;
-    private String fileId;
-    private Controller controller;
-
-    public DeleteFile(String filename, String fileId){
-        this.filename = filename;
+    public DeleteFile(String fileId) {
         this.fileId = fileId;
     }
 
-    public void start(Controller controller){
-        this.controller = controller;
+    public void start(Controller controller) {
+        Controller controller1 = controller;
         byte[] message = MessageBuilder.createMessage(Server.DELETE_INIT, Double.toString(getProtocolVersion()), Integer.toString(getServerId()), fileId);
         this.controller.sendToControlChannel(message);
-    }
-
-    public String getFilename() {
-        return filename;
     }
 
     public String getFileId() {
