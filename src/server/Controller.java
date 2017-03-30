@@ -1,7 +1,6 @@
 package server;
 
 
-import javafx.util.Pair;
 import server.messaging.Channel;
 import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
@@ -210,6 +209,8 @@ public class Controller {
 
         ScheduledExecutorService chunkToSend = chunksToBackUp.get(getChunkId(fileId, chunkNo));
 
+        int chunkBytes = byteArrayInputStream.available() ;
+
         /* If there is a PUTCHUNK message waiting to be sent,
          * then discard it because we have already an identical one. */
         if (chunkToSend != null) {
@@ -225,7 +226,7 @@ public class Controller {
         if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
-        if (!hasAvailableSpace(fileId, byteArrayInputStream.available())) {
+        if (!hasAvailableSpace(fileId, chunkBytes)) {
             System.out.println("Not enough space to backup chunk " + chunkNo + ".");
             return;
         }
@@ -249,8 +250,8 @@ public class Controller {
         chunkNoSet.add(chunkNo);
         storedChunks.putIfAbsent(fileId, chunkNoSet);
 
-        //TODO: remove getDirectorySize function
-        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
+        /*Update used space after backed up chunk*/
+        usedSpace += chunkBytes;
 
         controlChannel.sendMessageWithRandomDelay(
                 MessageBuilder.createMessage(
@@ -336,6 +337,7 @@ public class Controller {
     }
 
     private void processDeleteMessage(int serverId, String fileId) throws IOException {
+        long chunksSize = 0;
         desiredReplicationDegreesMap.remove(fileId);
         chunkCurrentReplicationDegree.remove(fileId);
         backedUpFiles.remove(fileId);
@@ -345,10 +347,15 @@ public class Controller {
 
         System.out.println("Received " + DELETE_INIT + " from " + serverId + " for file " + fileId);
 
-        for (Integer chunkNo : storedChunks.get(fileId))
+        for (Integer chunkNo : storedChunks.get(fileId)){
+            chunksSize += Files.size(getChunkPath(fileId,chunkNo));
             Files.deleteIfExists(getChunkPath(fileId, chunkNo));
+        }
 
         storedChunks.remove(fileId);
+
+        /*Update storage size used to store chunks*/
+        usedSpace -= chunksSize;
 
         System.out.println("Successfully deleted file " + fileId);
     }
@@ -410,13 +417,12 @@ public class Controller {
         ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) - 1);
 
+         /*Update storage size used to store chunks*/
+        usedSpace -= Files.size(getChunkPath(fileId,chunkNo));
+
         /* Delete Chunk */
         Files.deleteIfExists(getChunkPath(fileId, chunkNo));
         storedChunks.get(fileId).remove(chunkNo);
-
-        //TODO: remove getDirectorySize function
-        /*Update storage size used to store chunks*/
-        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
 
         System.out.println("Successfully deleted chunkNo " + chunkNo);
     }
