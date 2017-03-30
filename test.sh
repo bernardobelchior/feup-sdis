@@ -5,6 +5,11 @@ exists()
 	command -v "$1" >/dev/null 2>&1
 }
 
+launch_server() {
+	id=$(echo $1)
+	echo "Launching server $id..."
+	eval $terminal "\"java server.Server $protocolVersion $id $id $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; read\" &"
+}
 
 if [ "$#" -lt 1 ]; then
 	echo 'Wrong number of arguments. Usage:'
@@ -13,6 +18,13 @@ if [ "$#" -lt 1 ]; then
 fi
 
 os=$(uname)
+protocolVersion=$(echo 1.0)
+mcAddr=$(echo 224.0.0.0)
+mcPort=$(echo 4445)
+mdbAddr=$(echo 224.0.0.1)
+mdbPort=$(echo 4446)
+mdrAddr=$(echo 224.0.0.2)
+mdrPort=$(echo 4447)
 
 if [ "$os" = "Linux" ]; then ##Figure out how to know terminal name
 	if  exists urxvt ; then
@@ -33,23 +45,22 @@ fi
 modulePath=$(realpath $1)
 originalPath=$(realpath .)
 
+# Launch Multicast Snooper
+eval $terminal "\"java -jar McastSnooper.jar $mcAddr:$mcPort $mdbAddr:$mdbPort $mdrAddr:$mdrPort; read\" &"
+
 cd $1
 
-#rmiregistry
+# Launch rmiregistry
 echo "Lanching rmiregistry...."
 eval $terminal "\"rmiregistry -J-Djava.rmi.server.codebase=file://$modulePath\" &"
 
 sleep 1 #To be sure that the rmiregistry is running
 
-#Servers 
-echo "Launching server 1..."
-eval $terminal "\"java server.Server 1.0 1 1 224.0.0.0 4445 224.0.0.1 4446 224.0.0.2 4447; read\" &"
-
-echo "Launching server 2..."
-eval $terminal "\"java server.Server 1.0 2 2 224.0.0.0 4445 224.0.0.1 4446 224.0.0.2 4447; read\" &"
-
-echo "Launching server 3..."
-eval $terminal "\"java server.Server 1.0 3 3 224.0.0.0 4445 224.0.0.1 4446 224.0.0.2 4447; read\" &"
+# Launch Servers 
+launch_server "1"
+launch_server "2"
+launch_server "3"
+launch_server "4"
 
 wait
 

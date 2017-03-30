@@ -7,24 +7,23 @@ import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
-public class TestApp {
-
-    private static IInitiatorPeer initiatorPeer;
-
+class TestApp {
     public static void main(String[] args) {
         /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
 
         String peerAccessPoint = args[0];
-        String operation = args[1];
+        String operation = args[1].toUpperCase();
         String pathName;
+
+        IInitiatorPeer initiatorPeer;
 
         try {
             Registry registry = LocateRegistry.getRegistry("localhost"); //TODO: This is part of peerAcessPoint
             initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
             e.printStackTrace();
-            System.exit(1);
+            return;
         }
 
         switch (operation) {
@@ -32,7 +31,10 @@ public class TestApp {
                 pathName = args[2];
                 int replicationDegree = Integer.parseInt(args[3]);
                 try {
-                    initiatorPeer.backup(pathName, replicationDegree);
+                    if (initiatorPeer.backup(pathName, replicationDegree))
+                        System.out.println("File backup successful.");
+                    else
+                        System.out.println("File backup failed.");
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
@@ -40,7 +42,10 @@ public class TestApp {
             case "RESTORE":
                 pathName = args[2];
                 try {
-                    initiatorPeer.restore(pathName);
+                    if (initiatorPeer.restore(pathName))
+                        System.out.println("File successfully restored.");
+                    else
+                        System.out.println("File recovery failed.");
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }
@@ -57,7 +62,7 @@ public class TestApp {
                 int maximumDiskSpace = Integer.parseInt(args[2]);
                 try {
                     initiatorPeer.reclaim(maximumDiskSpace);
-                } catch (RemoteException e) {
+                } catch (java.io.IOException e) {
                     e.printStackTrace();
                 }
                 break;
@@ -68,7 +73,9 @@ public class TestApp {
                     e.printStackTrace();
                 }
                 break;
-
+            default:
+                System.out.println("Unrecognized option " + operation + ".");
+                break;
         }
 
 

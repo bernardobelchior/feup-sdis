@@ -24,13 +24,13 @@ public class Server {
     public static final int RESTORE_REPLY_MIN_DELAY = 0;
     public static final int RESTORE_REPLY_MAX_DELAY = 400;
 
-
     // File Deletion
     public static final String DELETE_INIT = "DELETE";
 
     // Space Reclaiming
-    public static final String RECLAIM_INIT = "RECLAIM"; //TODO: Define implementation
     public static final String RECLAIM_SUCESS = "REMOVED";
+    public static final int RECLAIM_REPLY_MIN_DELAY = 0;
+    public static final int RECLAIM_REPLY_MAX_DELAY = 400;
 
 
     public static final byte CR = 0xD;

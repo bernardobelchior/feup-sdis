@@ -3,6 +3,7 @@ package server;
 import java.io.File;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -136,7 +137,7 @@ public class Utils {
      * @throws IOException
      */
     public static Path getChunkPath(String fileId, int chunkNo) throws IOException {
-        return getFile( CHUNK_DIR + fileId + chunkNo).toPath();
+        return getFile(CHUNK_DIR + fileId + chunkNo).toPath();
     }
 
     /**
@@ -146,7 +147,7 @@ public class Utils {
      * @return File
      * @throws IOException
      */
-    public static File getFile(String filepath) throws IOException {
+    public static File getFile(String filepath) {
         File file = new File(BASE_DIR + filepath);
 
         if (file.getParentFile() != null)
@@ -155,5 +156,33 @@ public class Utils {
         return file;
     }
 
+    public static long getDirectorySize(String path){
+        long size = 0;
 
+        File directory = new File(path);
+        if(!directory.exists())
+            return 0;
+
+        File[] files = directory.listFiles();
+        for(File file : files){
+            if(file.isFile())
+                try {
+                    size += Files.size(file.toPath());
+                } catch (IOException e) {
+                    return 0;
+                }
+        }
+
+        return size;
+    }
+    /**
+     * Gets a chunkId from fileId and ChunkNo.
+     *
+     * @param fileId  FileId
+     * @param chunkNo Chunk number.
+     * @return Returns chunk Id.
+     */
+    public static String getChunkId(String fileId, int chunkNo) {
+        return fileId + chunkNo;
+    }
 }
