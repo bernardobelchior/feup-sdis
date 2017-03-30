@@ -38,7 +38,7 @@ public class Controller {
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToSend = new ConcurrentHashMap<>();
 
     /*Concurrent HashMap with fileId and Concurrent HashMap with file's chunkNo and respective replication degree*/
-    private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> fileChunkMap;
+    private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> chunkCurrentReplicationDegree;
 
     /*Concurrent HashMap with fileId and respective desired Replication Degree*/
     private ConcurrentHashMap<String, Integer> desiredReplicationDegreesMap;
@@ -68,7 +68,7 @@ public class Controller {
         if (!loadServerMetadata()) {
             storedChunks = new ConcurrentHashMap<>();
             desiredReplicationDegreesMap = new ConcurrentHashMap<>();
-            fileChunkMap = new ConcurrentHashMap<>();
+            chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
         }
 
         this.controlChannel.setController(this);
@@ -222,7 +222,7 @@ public class Controller {
             return;
 
         /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
-        if (fileChunkMap.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
+        if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
         if (!hasAvailableSpace(fileId, byteArrayInputStream.available())) {
@@ -249,6 +249,9 @@ public class Controller {
         chunkNoSet.add(chunkNo);
         storedChunks.putIfAbsent(fileId, chunkNoSet);
 
+        //TODO: remove getDirectorySize function
+        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
+
         controlChannel.sendMessageWithRandomDelay(
                 MessageBuilder.createMessage(
                         BACKUP_SUCCESS,
@@ -262,7 +265,6 @@ public class Controller {
 
     private void processStoredMessage(String fileId, int chunkNo) throws IOException {
         incrementReplicationDegree(fileId, chunkNo);
-        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
     }
 
     private void processGetChunkMessage(int senderId, String fileId, int chunkNo, InetAddress senderAddr, int senderPort) throws InvalidHeaderException, IOException {
@@ -335,7 +337,7 @@ public class Controller {
 
     private void processDeleteMessage(int serverId, String fileId) throws IOException {
         desiredReplicationDegreesMap.remove(fileId);
-        fileChunkMap.remove(fileId);
+        chunkCurrentReplicationDegree.remove(fileId);
         backedUpFiles.remove(fileId);
 
         if (!storedChunks.containsKey(fileId))
@@ -347,9 +349,6 @@ public class Controller {
             Files.deleteIfExists(getChunkPath(fileId, chunkNo));
 
         storedChunks.remove(fileId);
-
-        /*Update storage size used to store chunks*/
-        usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
 
         System.out.println("Successfully deleted file " + fileId);
     }
@@ -366,7 +365,7 @@ public class Controller {
             return;
 
         /* Chunk Replication Degree is greater than the desired Replication Degree for that fileId */
-        if (fileChunkMap.get(fileId).get(chunkNo) > desiredReplicationDegreesMap.get(fileId))
+        if (chunkCurrentReplicationDegree.get(fileId).get(chunkNo) > desiredReplicationDegreesMap.get(fileId))
             return;
 
 
@@ -392,14 +391,14 @@ public class Controller {
 
 
     private void incrementReplicationDegree(String fileId, int chunkNo) {
-        fileChunkMap.putIfAbsent(fileId, new ConcurrentHashMap<>());
+        chunkCurrentReplicationDegree.putIfAbsent(fileId, new ConcurrentHashMap<>());
 
-        ConcurrentHashMap<Integer, Integer> chunks = fileChunkMap.get(fileId);
+        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
     private void decrementReplicationDegree(String fileId, int chunkNo) {
-        ConcurrentHashMap<Integer, Integer> chunks = fileChunkMap.get(fileId);
+        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) - 1);
     }
 
@@ -408,13 +407,14 @@ public class Controller {
         System.out.println("Deleting chunkNo " + chunkNo + " from file" + fileId);
 
          /* Decrement Replication Degree */
-        ConcurrentHashMap<Integer, Integer> chunks = fileChunkMap.get(fileId);
+        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) - 1);
 
         /* Delete Chunk */
         Files.deleteIfExists(getChunkPath(fileId, chunkNo));
         storedChunks.get(fileId).remove(chunkNo);
 
+        //TODO: remove getDirectorySize function
         /*Update storage size used to store chunks*/
         usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
 
@@ -423,7 +423,7 @@ public class Controller {
 
     public boolean startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
-        fileChunkMap.put(backupFile.getFileId(), chunksReplicationDegree);
+        chunkCurrentReplicationDegree.put(backupFile.getFileId(), chunksReplicationDegree);
         desiredReplicationDegreesMap.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
         backedUpFiles.put(backupFile.getFileId(), backupFile.getFilename());
 
@@ -481,7 +481,7 @@ public class Controller {
         for (Map.Entry<String, Set<Integer>> file : files) {
             String fileId = file.getKey();
             for (Integer chunk : file.getValue()) {
-                diff = fileChunkMap.get(fileId).get(chunk) - desiredReplicationDegreesMap.get(fileId);
+                diff = chunkCurrentReplicationDegree.get(fileId).get(chunk) - desiredReplicationDegreesMap.get(fileId);
                 leastNecessaryChunks.add(new ChunkReplication(fileId, chunk, diff));
             }
         }
@@ -524,7 +524,7 @@ public class Controller {
         try {
             storedChunks = (ConcurrentHashMap<String, Set<Integer>>) objectInputStream.readObject();
             desiredReplicationDegreesMap = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
-            fileChunkMap = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
+            chunkCurrentReplicationDegree = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
         } catch (IOException e) {
             System.err.println("Could not read from configuration file.");
             return false;
@@ -549,7 +549,7 @@ public class Controller {
         try {
             objectOutputStream.writeObject(storedChunks);
             objectOutputStream.writeObject(desiredReplicationDegreesMap);
-            objectOutputStream.writeObject(fileChunkMap);
+            objectOutputStream.writeObject(chunkCurrentReplicationDegree);
         } catch (IOException e) {
             System.err.println("Could not write to configuration file.");
             e.printStackTrace();
@@ -570,8 +570,8 @@ public class Controller {
             sb.append("\n\tDesired Replication Degree: ");
             sb.append(desiredReplicationDegreesMap.get(file.getKey()));
 
-            if (fileChunkMap.containsKey(file.getKey()))
-                for (Map.Entry<Integer, Integer> chunk : fileChunkMap.get(file.getKey()).entrySet()) {
+            if (chunkCurrentReplicationDegree.containsKey(file.getKey()))
+                for (Map.Entry<Integer, Integer> chunk : chunkCurrentReplicationDegree.get(file.getKey()).entrySet()) {
                     sb.append("\n\t\tChunk No: ");
                     sb.append(chunk.getKey());
                     sb.append("\n\t\tReplication Degree: ");
@@ -603,7 +603,7 @@ public class Controller {
                 }
 
                 sb.append("\n\t\t\tReplication degree: ");
-                sb.append(fileChunkMap.get(fileChunk.getKey()).getOrDefault(chunkNo, 0));
+                sb.append(chunkCurrentReplicationDegree.get(fileChunk.getKey()).getOrDefault(chunkNo, 0));
             }
         }
 
