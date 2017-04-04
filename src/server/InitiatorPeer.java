@@ -47,7 +47,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
     @Override
     public boolean reclaim(int spaceReserved) throws IOException {
         System.out.println("Starting space reclaiming with space reserved of " + spaceReserved + " KBytes");
-        return controller.startReclaim(spaceReserved);
+        return controller.startReclaim(spaceReserved * 1000);
     }
 
     @Override

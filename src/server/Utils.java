@@ -148,33 +148,25 @@ public class Utils {
      * @throws IOException
      */
     public static File getFile(String filepath) {
-        File file = new File(BASE_DIR + filepath);
-
-        if (file.getParentFile() != null)
-            file.getParentFile().mkdirs();
-
-        return file;
+        return new File(BASE_DIR + filepath);
     }
 
-    public static long getDirectorySize(String path){
+    public static long getDirectorySize(String path) throws IOException {
         long size = 0;
 
         File directory = new File(path);
-        if(!directory.exists())
+        if (!directory.exists())
             return 0;
 
         File[] files = directory.listFiles();
-        for(File file : files){
-            if(file.isFile())
-                try {
-                    size += Files.size(file.toPath());
-                } catch (IOException e) {
-                    return 0;
-                }
+        for (File file : files) {
+            if (file.isFile())
+                size += Files.size(file.toPath());
         }
 
         return size;
     }
+
     /**
      * Gets a chunkId from fileId and ChunkNo.
      *

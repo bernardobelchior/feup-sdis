@@ -1,8 +1,5 @@
 package server;
 
-/**
- * Created by mariajoaomirapaulo on 28/03/17.
- */
 public class ChunkReplication {
     private String fileId;
     private int chunkNo;

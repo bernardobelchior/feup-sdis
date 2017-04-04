@@ -65,7 +65,13 @@ public class Server {
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
 
-        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel);
+        Controller controller;
+        try {
+            controller = new Controller(controlChannel, backupChannel, recoveryChannel);
+        } catch (InstantiationException e) {
+            System.err.println("Could not instantiate Controller.");
+            return;
+        }
 
         InitiatorPeer initiatorPeer = null;
 
