@@ -35,15 +35,17 @@ if [ "$os" = "Linux" ]; then ##Figure out how to know terminal name
 		exit 1
 	fi
 
+	modulePath=$(realpath $1)
+	originalPath=$(realpath .)
 	terminal=$(echo $terminal -e bash -c)
 elif [ "$os" = "Darwin" ]; then
-	terminal=$(echo open -a Terminal)
+	terminal=$(echo open -a Terminal.app)
+	originalPath=$(pwd)
+	modulePath=$(echo $originalPath/$1)
 else
 	exit 1
 fi
 
-modulePath=$(realpath $1)
-originalPath=$(realpath .)
 
 # Launch Multicast Snooper
 eval $terminal "\"java -jar McastSnooper.jar $mcAddr:$mcPort $mdbAddr:$mdbPort $mdrAddr:$mdrPort; read\" &"
