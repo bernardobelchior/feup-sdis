@@ -4,7 +4,6 @@ package server;
 import server.messaging.Channel;
 import server.messaging.MessageBuilder;
 import server.protocol.BackupFile;
-import server.protocol.DeleteFile;
 import server.protocol.RecoverFile;
 
 import java.io.*;
@@ -131,6 +130,7 @@ public class Controller {
 
             try {
                 String[] headerFields = parseHeader(byteArrayInputStream).split(" ");
+                double protocolVersion = parseProtocolVersion(headerFields[1]);
                 int senderId = parseSenderId(headerFields[2]);
                 checkFileIdValidity(headerFields[3]);
 
@@ -151,7 +151,13 @@ public class Controller {
                         if (headerFields.length != 6)
                             throw new InvalidHeaderException("A chunk backup header must have exactly 6 fields. Received " + headerFields.length + ".");
 
-                        processBackupMessage(byteArrayInputStream, senderId, headerFields[3], chunkNo, replicationDegree);
+                        if (getProtocolVersion() > 1.0 & protocolVersion > 1.0)
+                            try {
+                                Thread.sleep(randomBetween(BACKUP_REPLY_MIN_DELAY, BACKUP_REPLY_MAX_DELAY));
+                            } catch (InterruptedException ignored) {
+                            }
+
+                        processBackupMessage(byteArrayInputStream, protocolVersion, senderId, headerFields[3], chunkNo, replicationDegree);
                         break;
                     case BACKUP_SUCCESS:
                         if (headerFields.length != 5)
@@ -207,24 +213,21 @@ public class Controller {
      * @throws InvalidHeaderException In case of malformed header arguments.
      * @throws IOException            In case of error storing the received chunk.
      */
-    private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, int senderId, String fileId, int chunkNo, int desiredReplicationDegree) throws InvalidHeaderException {
+    private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, double protocolVersion, int senderId, String fileId, int chunkNo, int desiredReplicationDegree) throws InvalidHeaderException {
         if (senderId == getServerId()) // Same sender
             return;
+
+        checkFileIdValidity(fileId);
 
         /* If the server is backing up this file, it cannot store chunks from the same file */
         if (backedUpFiles.containsKey(fileId))
             return;
 
-        checkFileIdValidity(fileId);
-
         desiredReplicationDegrees.putIfAbsent(fileId, desiredReplicationDegree);
 
         ScheduledExecutorService chunkToSend = chunksToBackUp.get(getChunkId(fileId, chunkNo));
-
-        int chunkSize = byteArrayInputStream.available();
-
         /* If there is a PUTCHUNK message waiting to be sent,
-         * then discard it because we have already an identical one. */
+         * then discard it because we have already received an identical one. */
         if (chunkToSend != null) {
             chunkToSend.shutdownNow();
             chunksToBackUp.remove(getChunkId(fileId, chunkNo));
@@ -238,42 +241,49 @@ public class Controller {
         if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
+        int chunkSize = byteArrayInputStream.available();
         if (!hasSpaceAvailable(chunkSize)) {
             System.out.println("Not enough space to backup chunk " + chunkNo + " from fileId " + fileId + ".");
             return;
         }
 
         try {
-            Path chunkPath = getChunkPath(fileId, chunkNo);
-            if (chunkPath.toFile().exists())
-                chunkPath.toFile().delete();
-
-            Files.copy(byteArrayInputStream, chunkPath, StandardCopyOption.REPLACE_EXISTING);
-            System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
-
             /* Update used space after backing up chunk */
-            usedSpace += chunkSize;
+            usedSpace += storeChunk(fileId, chunkNo, byteArrayInputStream);
+            System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
         } catch (IOException e) {
             System.err.println("Could not create file to store chunk. Discarding...");
-            e.printStackTrace();
             return;
         }
 
         /* If server already has a set for that fileId, adds the new chunkNo, otherwise creates a new Set */
-        Set<Integer> chunkNoSet = storedChunks.getOrDefault(fileId, Collections.synchronizedSet(new HashSet<>()));
+        Set<Integer> fileStoredChunks = storedChunks.getOrDefault(fileId, Collections.synchronizedSet(new HashSet<>()));
 
-        chunkNoSet.add(chunkNo);
-        storedChunks.putIfAbsent(fileId, chunkNoSet);
+        fileStoredChunks.add(chunkNo);
+        storedChunks.putIfAbsent(fileId, fileStoredChunks);
 
-        controlChannel.sendMessageWithRandomDelay(
-                MessageBuilder.createMessage(
-                        BACKUP_SUCCESS,
-                        Double.toString(getProtocolVersion()),
-                        Integer.toString(getServerId()),
-                        fileId,
-                        Integer.toString(chunkNo)),
-                BACKUP_REPLY_MIN_DELAY,
-                BACKUP_REPLY_MAX_DELAY);
+        byte[] message = MessageBuilder.createMessage(
+                BACKUP_SUCCESS,
+                Double.toString(getProtocolVersion()),
+                Integer.toString(getServerId()),
+                fileId,
+                Integer.toString(chunkNo));
+
+        if (getProtocolVersion() > 1.0 && protocolVersion > 1.0)
+            controlChannel.sendMessage(message);
+        else
+            controlChannel.sendMessageWithRandomDelay(message, BACKUP_REPLY_MIN_DELAY, BACKUP_REPLY_MAX_DELAY);
+    }
+
+    private long storeChunk(String fileId, int chunkNo, ByteArrayInputStream byteArrayInputStream) throws IOException {
+        int chunkSize = byteArrayInputStream.available();
+
+        Path chunkPath = getChunkPath(fileId, chunkNo);
+        if (chunkPath.toFile().exists())
+            chunkPath.toFile().delete();
+
+        Files.copy(byteArrayInputStream, chunkPath, StandardCopyOption.REPLACE_EXISTING);
+        return chunkSize;
     }
 
     private void processStoredMessage(String fileId, int chunkNo) throws IOException {
@@ -307,15 +317,10 @@ public class Controller {
                 fileId,
                 "" + chunkNo);
 
-        if (getProtocolVersion() > 1) {
+        executorService.schedule(() -> {
             System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
-            controlChannel.sendMessageTo(message, senderAddr, senderPort);
-        } else {
-            executorService.schedule(() -> {
-                System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
-                controlChannel.sendMessage(message);
-            }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
-        }
+            controlChannel.sendMessage(message);
+        }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
     private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, int serverId, String fileId, int chunkNo) {
@@ -461,15 +466,18 @@ public class Controller {
         return ret;
     }
 
-    public void startFileDelete(DeleteFile deleteFile) {
+    public boolean startFileDelete(String fileId) {
         /*If the fileId does not exist in the network*/
-        if (desiredReplicationDegrees.get(deleteFile.getFileId()) == null) {
+        if (!desiredReplicationDegrees.containsKey(fileId)) {
             System.out.println("File not found in the network.");
-            return;
+            return false;
         }
 
-        deleteFile.start(this);
+        byte[] message = MessageBuilder.createMessage(Server.DELETE_INIT, Double.toString(getProtocolVersion()), Integer.toString(getServerId()), fileId);
+        sendToControlChannel(message);
+
         saveServerMetadata();
+        return true;
     }
 
 

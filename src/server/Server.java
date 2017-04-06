@@ -58,7 +58,7 @@ public class Server {
 
         BASE_DIR = serverId + "/";
 
-        System.out.println("Starting server with id " + serverId + ".");
+        System.out.println("Starting server with id " + serverId + " and protocol version " + protocolVersion + ".");
         System.out.println("Access Point: " + serviceAccessPoint);
 
         Channel controlChannel = new Channel(args[3], args[4]);

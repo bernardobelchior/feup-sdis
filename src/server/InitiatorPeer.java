@@ -2,7 +2,6 @@ package server;
 
 import common.IInitiatorPeer;
 import server.protocol.BackupFile;
-import server.protocol.DeleteFile;
 import server.protocol.RecoverFile;
 
 import javax.xml.bind.DatatypeConverter;
@@ -36,12 +35,19 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
         return controller.startFileRecovery(new RecoverFile(filename, fileId));
     }
 
+    /**
+     * Deletes the specified file.
+     *
+     * @param filename Name of file to delete.
+     * @return Returns true if the file can be deleted.
+     * @throws RemoteException In case there is a problem with RMI.
+     */
     @Override
-    public void delete(String filename) throws RemoteException {
+    public boolean delete(String filename) throws RemoteException {
         String fileId = generateFileId(filename);
-        System.out.println("Starting delete of file with fileId " + fileId + "...");
+        System.out.println("Starting deletion of file with fileId " + fileId + "...");
 
-        controller.startFileDelete(new DeleteFile(fileId));
+        return controller.startFileDelete(fileId);
     }
 
     @Override

@@ -53,7 +53,10 @@ class TestApp {
             case "DELETE":
                 pathName = args[2];
                 try {
-                    initiatorPeer.delete(pathName);
+                    if(initiatorPeer.delete(pathName))
+                        System.out.println("File deletion successful.");
+                    else
+                        System.out.println("File deletion failed.");
                 } catch (RemoteException e) {
                     e.printStackTrace();
                 }

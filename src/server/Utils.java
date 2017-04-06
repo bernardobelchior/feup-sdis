@@ -109,7 +109,7 @@ public class Utils {
      * @param serverVersion Server version string
      * @throws InvalidHeaderException In case the header is malformed
      */
-    public static double parseServerVersion(String serverVersion) throws InvalidHeaderException {
+    public static double parseProtocolVersion(String serverVersion) throws InvalidHeaderException {
         try {
             return Double.parseDouble(serverVersion);
         } catch (NumberFormatException e) {

@@ -28,7 +28,7 @@ public interface IInitiatorPeer extends Remote {
      *
      * @param filename Name of file to delete.
      */
-    void delete(String filename) throws RemoteException;
+    boolean delete(String filename) throws RemoteException;
 
     /**
      * Changes space allocated to the backup service to {@spaceReserved} bytes.
