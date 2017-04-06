@@ -74,7 +74,7 @@ public class Channel {
      * Sends a message to a specified address and port.
      *
      * @param message Message to send.
-     * @param sender  Sender address and port.
+     * @param senderAddr  Sender address and port.
      */
     public void sendMessageTo(byte[] message, InetAddress senderAddr, int senderPort) {
         DatagramPacket packet = new DatagramPacket(message, message.length, senderAddr, senderPort);

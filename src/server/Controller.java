@@ -134,7 +134,6 @@ public class Controller {
                 int senderId = parseSenderId(headerFields[2]);
                 checkFileIdValidity(headerFields[3]);
 
-
                 int chunkNo = 0;
                 int replicationDegree = 0;
                 if (headerFields.length > 4) {
@@ -170,7 +169,7 @@ public class Controller {
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processGetChunkMessage(senderId, headerFields[3], chunkNo, senderAddr, senderPort);
+                        processGetChunkMessage(protocolVersion, senderId, headerFields[3], chunkNo, senderAddr, senderPort);
                         break;
                     case RESTORE_SUCCESS:
                         System.out.println("Received message " + headerFields[0] + " from " + senderAddr + ":" + senderPort);
@@ -290,7 +289,18 @@ public class Controller {
         incrementReplicationDegree(fileId, chunkNo);
     }
 
-    private void processGetChunkMessage(int senderId, String fileId, int chunkNo, InetAddress senderAddr, int senderPort) throws InvalidHeaderException, IOException {
+    /**
+     * Processes a get chunk message
+     * @param SenderProtocolVersion sender Protocol Version
+     * @param senderId Sender Id
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     * @param senderAddr Sender Ip Address
+     * @param senderPort Sender Port number
+     * @throws InvalidHeaderException In case of malformed header arguments
+     * @throws IOException In case of error getting chunk path
+     */
+    private void processGetChunkMessage(double SenderProtocolVersion, int senderId, String fileId, int chunkNo, InetAddress senderAddr, int senderPort) throws InvalidHeaderException, IOException {
         if (senderId == getServerId()) // Same sender
             return;
 
@@ -323,6 +333,13 @@ public class Controller {
         }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * Processes restored message
+     * @param byteArrayInputStream InputStream containing everything after the end of the header
+     * @param serverId Server Id
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     */
     private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, int serverId, String fileId, int chunkNo) {
         if (serverId == getServerId()) //Same sender
             return;
@@ -353,6 +370,12 @@ public class Controller {
         }
     }
 
+    /**
+     * Processes delete message
+     * @param serverId Server Id
+     * @param fileId File Id
+     * @throws IOException  In case of error getting chunk path
+     */
     private void processDeleteMessage(int serverId, String fileId) throws IOException {
         long chunksSize = 0;
         desiredReplicationDegrees.remove(fileId);
@@ -377,6 +400,13 @@ public class Controller {
         System.out.println("Successfully deleted file " + fileId);
     }
 
+    /**
+     * Processes reclaim message
+     * @param serverId Server Id
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     * @throws IOException In case of error getting chunk path
+     */
     private void processReclaimMessage(int serverId, String fileId, int chunkNo) throws IOException {
         decrementReplicationDegree(fileId, chunkNo);
 
@@ -414,6 +444,11 @@ public class Controller {
     }
 
 
+    /**
+     * Increments replication degree
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     */
     private void incrementReplicationDegree(String fileId, int chunkNo) {
         chunkCurrentReplicationDegree.putIfAbsent(fileId, new ConcurrentHashMap<>());
 
@@ -421,11 +456,22 @@ public class Controller {
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
+    /***
+     * Decrements replication degree
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     */
     private void decrementReplicationDegree(String fileId, int chunkNo) {
         ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) - 1);
     }
 
+    /**
+     * Delets a chunk
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     * @throws IOException
+     */
     public void deleteChunk(String fileId, Integer chunkNo) throws IOException {
         System.out.println("Deleting chunkNo " + chunkNo + " from file" + fileId);
 
@@ -441,6 +487,9 @@ public class Controller {
         storedChunks.get(fileId).remove(chunkNo);
     }
 
+    /*
+
+     */
     public boolean startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         chunkCurrentReplicationDegree.put(backupFile.getFileId(), chunksReplicationDegree);
@@ -466,6 +515,10 @@ public class Controller {
         return ret;
     }
 
+    /**
+     * Starts file delete
+     * @param fileId File Id
+     */
     public boolean startFileDelete(String fileId) {
         /*If the fileId does not exist in the network*/
         if (!desiredReplicationDegrees.containsKey(fileId)) {
@@ -479,8 +532,6 @@ public class Controller {
         saveServerMetadata();
         return true;
     }
-
-
     /**
      * Starts the reclaim space process.
      *
@@ -585,6 +636,9 @@ public class Controller {
         return true;
     }
 
+    /**
+     * Saves server metadata
+     */
     private void saveServerMetadata() {
         ObjectOutputStream objectOutputStream;
         try {
@@ -667,6 +721,11 @@ public class Controller {
         return sb.toString();
     }
 
+    /**
+     * Checks if peer has available space to store a new chunk
+     * @param chunkSize chunk size
+     * @return Returns true if peers has available space to store chunk
+     */
     public boolean hasSpaceAvailable(int chunkSize) {
         return usedSpace + (long) chunkSize < maxStorageSize;
     }
