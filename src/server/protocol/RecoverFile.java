@@ -1,10 +1,14 @@
 package server.protocol;
 
 import server.Controller;
+import server.Server;
 import server.messaging.MessageBuilder;
 
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
+import java.net.SocketException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,6 +25,7 @@ public class RecoverFile {
     private final ConcurrentHashMap<Integer, byte[]> receivedChunks;
     private int currentChunk = 0;
     private ExecutorService threadPool;
+    private DatagramSocket recoverySocket;
 
     public RecoverFile(String filename, String fileId) {
         this.filename = filename;
@@ -36,6 +41,10 @@ public class RecoverFile {
      */
     public boolean start(Controller controller) {
         this.controller = controller;
+
+        /*If protocol version is greater than 1.0, starts listening to the udp socket from messages*/
+        if(getProtocolVersion()>1.0)
+            startReadingFromSocket();
 
         while (!receivedAllChunks()) {
             threadPool = Executors.newFixedThreadPool(CHUNKS_PER_REQUEST);
@@ -160,5 +169,35 @@ public class RecoverFile {
      */
     public boolean hasChunk(int chunkNo) {
         return receivedChunks.containsKey(chunkNo);
+    }
+
+    /**
+     * Starts reading from socket if protocol version is greater than 1.0
+     */
+    public void startReadingFromSocket(){
+        try {
+            recoverySocket = new DatagramSocket(2000 + getServerId());
+            listenToSocket();
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+    }
+    /**
+     * Listens to the socket for messages.
+     */
+    public void listenToSocket() {
+        new Thread(() -> {
+            while (true) {
+                byte[] buffer = new byte[Server.MAX_HEADER_SIZE + Server.CHUNK_SIZE];
+                DatagramPacket packet = new DatagramPacket(buffer, buffer.length);
+
+                try {
+                    recoverySocket.receive(packet);
+                    controller.processMessage(packet.getData(), packet.getLength(), packet.getAddress(), packet.getPort());
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }).start();
     }
 }

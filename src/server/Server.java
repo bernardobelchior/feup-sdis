@@ -2,6 +2,8 @@ package server;
 
 import server.messaging.Channel;
 
+import java.net.DatagramSocket;
+import java.net.SocketException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;

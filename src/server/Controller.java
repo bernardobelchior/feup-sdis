@@ -7,7 +7,10 @@ import server.protocol.BackupFile;
 import server.protocol.RecoverFile;
 
 import java.io.*;
+import java.net.DatagramPacket;
+import java.net.DatagramSocket;
 import java.net.InetAddress;
+import java.net.SocketException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -26,6 +29,7 @@ public class Controller {
     private final Channel controlChannel;
     private final Channel backupChannel;
     private final Channel recoveryChannel;
+
     /*Concurrent HashMap with fileId and respective RecoverFile object*/
     private final ConcurrentHashMap<String, RecoverFile> ongoingRecoveries = new ConcurrentHashMap<>();
 
@@ -327,10 +331,37 @@ public class Controller {
                 fileId,
                 "" + chunkNo);
 
-        executorService.schedule(() -> {
-            System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
-            controlChannel.sendMessage(message);
-        }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
+        if(SenderProtocolVersion > 1.0 && getProtocolVersion() > 1.0){
+            System.out.println("Protocol Version 1.1");
+            executorService.schedule(() -> {
+                System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
+                sendToSocket(message,senderId, senderAddr);
+            }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
+
+        }
+        else{
+            executorService.schedule(() -> {
+                System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
+                controlChannel.sendMessage(message);
+            }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
+        }
+
+
+    }
+
+    public void sendToSocket(byte[] message, int senderId, InetAddress inetAddress) {
+        DatagramSocket recoverySocket = null;
+        try {
+            recoverySocket = new DatagramSocket();
+        } catch (SocketException e) {
+            e.printStackTrace();
+        }
+        DatagramPacket datagramPacket = new DatagramPacket(message, message.length,inetAddress,2000 + senderId);
+        try {
+            recoverySocket.send(datagramPacket);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
