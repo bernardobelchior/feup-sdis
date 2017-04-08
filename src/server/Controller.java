@@ -291,14 +291,15 @@ public class Controller {
 
     /**
      * Processes a get chunk message
+     *
      * @param SenderProtocolVersion sender Protocol Version
-     * @param senderId Sender Id
-     * @param fileId File Id
-     * @param chunkNo Chunk number
-     * @param senderAddr Sender Ip Address
-     * @param senderPort Sender Port number
+     * @param senderId              Sender Id
+     * @param fileId                File Id
+     * @param chunkNo               Chunk number
+     * @param senderAddr            Sender Ip Address
+     * @param senderPort            Sender Port number
      * @throws InvalidHeaderException In case of malformed header arguments
-     * @throws IOException In case of error getting chunk path
+     * @throws IOException            In case of error getting chunk path
      */
     private void processGetChunkMessage(double SenderProtocolVersion, int senderId, String fileId, int chunkNo, InetAddress senderAddr, int senderPort) throws InvalidHeaderException, IOException {
         if (senderId == getServerId()) // Same sender
@@ -335,10 +336,11 @@ public class Controller {
 
     /**
      * Processes restored message
+     *
      * @param byteArrayInputStream InputStream containing everything after the end of the header
-     * @param serverId Server Id
-     * @param fileId File Id
-     * @param chunkNo Chunk number
+     * @param serverId             Server Id
+     * @param fileId               File Id
+     * @param chunkNo              Chunk number
      */
     private void processRestoredMessage(ByteArrayInputStream byteArrayInputStream, int serverId, String fileId, int chunkNo) {
         if (serverId == getServerId()) //Same sender
@@ -372,9 +374,10 @@ public class Controller {
 
     /**
      * Processes delete message
+     *
      * @param serverId Server Id
-     * @param fileId File Id
-     * @throws IOException  In case of error getting chunk path
+     * @param fileId   File Id
+     * @throws IOException In case of error getting chunk path
      */
     private void processDeleteMessage(int serverId, String fileId) throws IOException {
         long chunksSize = 0;
@@ -402,9 +405,10 @@ public class Controller {
 
     /**
      * Processes reclaim message
+     *
      * @param serverId Server Id
-     * @param fileId File Id
-     * @param chunkNo Chunk number
+     * @param fileId   File Id
+     * @param chunkNo  Chunk number
      * @throws IOException In case of error getting chunk path
      */
     private void processReclaimMessage(int serverId, String fileId, int chunkNo) throws IOException {
@@ -446,7 +450,8 @@ public class Controller {
 
     /**
      * Increments replication degree
-     * @param fileId File Id
+     *
+     * @param fileId  File Id
      * @param chunkNo Chunk number
      */
     private void incrementReplicationDegree(String fileId, int chunkNo) {
@@ -468,7 +473,8 @@ public class Controller {
 
     /**
      * Delets a chunk
-     * @param fileId File Id
+     *
+     * @param fileId  File Id
      * @param chunkNo Chunk number
      * @throws IOException
      */
@@ -487,8 +493,11 @@ public class Controller {
         storedChunks.get(fileId).remove(chunkNo);
     }
 
-    /*
-
+    /**
+     * Starts the file backup.
+     *
+     * @param backupFile File backup protocol.
+     * @return Returns true if the backup was successful.
      */
     public boolean startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
@@ -517,6 +526,7 @@ public class Controller {
 
     /**
      * Starts file delete
+     *
      * @param fileId File Id
      */
     public boolean startFileDelete(String fileId) {
@@ -532,6 +542,7 @@ public class Controller {
         saveServerMetadata();
         return true;
     }
+
     /**
      * Starts the reclaim space process.
      *
@@ -723,6 +734,7 @@ public class Controller {
 
     /**
      * Checks if peer has available space to store a new chunk
+     *
      * @param chunkSize chunk size
      * @return Returns true if peers has available space to store chunk
      */
