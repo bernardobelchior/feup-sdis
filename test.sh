@@ -8,7 +8,7 @@ exists()
 launch_server() {
 	id=$(echo $1)
 	echo "Launching server $id..."
-	eval $terminal "\"java server.Server $protocolVersion $id $id $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; read\" &"
+	eval $terminal "\"java server.Server $protocolVersion $id $id $mcAddr $mcPort $mdbAddr $mdbPort $mdrAddr $mdrPort; bash\" &"
 }
 
 if [ "$#" -lt 1 ]; then
