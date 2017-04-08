@@ -23,8 +23,6 @@ public class RecoverFile {
     private int currentChunk = 0;
     private ExecutorService threadPool;
     private ServerSocket recoverySocket;
-    private BufferedReader in;
-    private PrintWriter out;
     private Socket socket;
 
     public RecoverFile(String filename, String fileId) {

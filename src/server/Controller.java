@@ -58,6 +58,7 @@ public class Controller {
     private Socket recoverySocket;
 
     private OutputStream outputStream;
+
     private DataOutputStream dataOutputStream;
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) throws InstantiationException {
@@ -280,6 +281,15 @@ public class Controller {
             controlChannel.sendMessageWithRandomDelay(message, BACKUP_REPLY_MIN_DELAY, BACKUP_REPLY_MAX_DELAY);
     }
 
+
+    /**
+     * Stores a chunk
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     * @param byteArrayInputStream byteArrayInputStream containing chunk body
+     * @return
+     * @throws IOException
+     */
     private long storeChunk(String fileId, int chunkNo, ByteArrayInputStream byteArrayInputStream) throws IOException {
         int chunkSize = byteArrayInputStream.available();
 
@@ -291,6 +301,12 @@ public class Controller {
         return chunkSize;
     }
 
+    /**
+     * Processes a stored message
+     * @param fileId File Id
+     * @param chunkNo Chunk number
+     * @throws IOException
+     */
     private void processStoredMessage(String fileId, int chunkNo) throws IOException {
         incrementReplicationDegree(fileId, chunkNo);
     }
@@ -538,6 +554,11 @@ public class Controller {
     }
 
 
+    /**
+     * Starts file backup
+     * @param backupFile backupFile to be backed up
+     * @return true If file backup successful
+     */
     public boolean startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         chunkCurrentReplicationDegree.put(backupFile.getFileId(), chunksReplicationDegree);
@@ -549,6 +570,11 @@ public class Controller {
         return ret;
     }
 
+    /**
+     * Starts file recovery
+     * @param recoverFile recoverFile to be recovered
+     * @return true If file was successfully restored
+     */
     public boolean startFileRecovery(RecoverFile recoverFile) {
         /* If the fileId does not exist in the network */
         if (desiredReplicationDegrees.get(recoverFile.getFileId()) == null) {
@@ -707,6 +733,11 @@ public class Controller {
         }
     }
 
+
+    /**
+     * Retrieves local service state information
+     * @return state information
+     */
     public String getState() {
         StringBuilder sb = new StringBuilder();
 
@@ -778,8 +809,11 @@ public class Controller {
         return usedSpace + (long) chunkSize < maxStorageSize;
     }
 
+    /**
+     * Gets recovery channel
+     * @return Returns recovery channel
+     */
     public Channel getRecoveryChannel() {
         return recoveryChannel;
     }
-
 }
