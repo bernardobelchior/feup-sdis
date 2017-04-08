@@ -7,10 +7,7 @@ import server.protocol.BackupFile;
 import server.protocol.RecoverFile;
 
 import java.io.*;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
-import java.net.InetAddress;
-import java.net.SocketException;
+import java.net.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -57,6 +54,11 @@ public class Controller {
     /* Maps FileId to Filename */
     private ConcurrentHashMap<String, String> backedUpFiles = new ConcurrentHashMap<>();
 
+    /* Socket used for tcp connection */
+    private Socket recoverySocket;
+
+    private OutputStream outputStream;
+    private DataOutputStream dataOutputStream;
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) throws InstantiationException {
         this.controlChannel = controlChannel;
@@ -127,7 +129,7 @@ public class Controller {
      * @param message Message to process.
      * @param size    Message size
      */
-    public void processMessage(byte[] message, int size, InetAddress senderAddr, int senderPort) {
+    public void processMessage(byte[] message, int size, InetAddress senderAddr) {
         new Thread(() -> {
 
             ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message, 0, size);
@@ -169,14 +171,14 @@ public class Controller {
                         processStoredMessage(headerFields[3], chunkNo);
                         break;
                     case RESTORE_INIT:
-                        System.out.println("Received message " + headerFields[0] + " from " + senderAddr + ":" + senderPort);
+                        System.out.println("Received message " + headerFields[0] + " from " + senderId);
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processGetChunkMessage(protocolVersion, senderId, headerFields[3], chunkNo, senderAddr, senderPort);
+                        processGetChunkMessage(protocolVersion, senderId, headerFields[3], chunkNo, senderAddr);
                         break;
                     case RESTORE_SUCCESS:
-                        System.out.println("Received message " + headerFields[0] + " from " + senderAddr + ":" + senderPort);
+                        System.out.println("Received message " + headerFields[0] + " from " + senderId);
 
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
@@ -299,12 +301,10 @@ public class Controller {
      * @param senderId Sender Id
      * @param fileId File Id
      * @param chunkNo Chunk number
-     * @param senderAddr Sender Ip Address
-     * @param senderPort Sender Port number
      * @throws InvalidHeaderException In case of malformed header arguments
      * @throws IOException In case of error getting chunk path
      */
-    private void processGetChunkMessage(double SenderProtocolVersion, int senderId, String fileId, int chunkNo, InetAddress senderAddr, int senderPort) throws InvalidHeaderException, IOException {
+    private void processGetChunkMessage(double SenderProtocolVersion, int senderId, String fileId, int chunkNo, InetAddress senderAddress) throws InvalidHeaderException, IOException {
         if (senderId == getServerId()) // Same sender
             return;
 
@@ -332,10 +332,9 @@ public class Controller {
                 "" + chunkNo);
 
         if(SenderProtocolVersion > 1.0 && getProtocolVersion() > 1.0){
-            System.out.println("Protocol Version 1.1");
             executorService.schedule(() -> {
                 System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
-                sendToSocket(message,senderId, senderAddr);
+                sendMessageToSocket(message,senderAddress);
             }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
 
         }
@@ -349,19 +348,39 @@ public class Controller {
 
     }
 
-    public void sendToSocket(byte[] message, int senderId, InetAddress inetAddress) {
-        DatagramSocket recoverySocket = null;
+    /**
+     * Establishes TCP connection
+     * @param senderAddress sender InetAddress
+     */
+    public void createRecoverySocket(InetAddress senderAddress){
         try {
-            recoverySocket = new DatagramSocket();
-        } catch (SocketException e) {
-            e.printStackTrace();
-        }
-        DatagramPacket datagramPacket = new DatagramPacket(message, message.length,inetAddress,2000 + senderId);
-        try {
-            recoverySocket.send(datagramPacket);
+            recoverySocket = new Socket(senderAddress, recoveryChannel.getPort());
+            outputStream = recoverySocket.getOutputStream();
+            dataOutputStream = new DataOutputStream(outputStream);
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    /**
+     * Sends a message to socket using TCP connection
+     * @param message message to be sent
+     * @param senderAddress Sender InetAddress
+     */
+    public void sendMessageToSocket(byte[] message, InetAddress senderAddress) {
+
+        if(recoverySocket==null)
+            createRecoverySocket(senderAddress);
+
+        try {
+            dataOutputStream.writeInt(message.length);
+            if (message.length > 0) {
+                dataOutputStream.write(message);
+            }
+        } catch (IOException e) {
+            System.err.println("Error creating socket...");
+        }
+
     }
 
     /**
@@ -518,9 +537,7 @@ public class Controller {
         storedChunks.get(fileId).remove(chunkNo);
     }
 
-    /*
 
-     */
     public boolean startFileBackup(BackupFile backupFile) {
         ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
         chunkCurrentReplicationDegree.put(backupFile.getFileId(), chunksReplicationDegree);
@@ -759,6 +776,10 @@ public class Controller {
      */
     public boolean hasSpaceAvailable(int chunkSize) {
         return usedSpace + (long) chunkSize < maxStorageSize;
+    }
+
+    public Channel getRecoveryChannel() {
+        return recoveryChannel;
     }
 
 }
