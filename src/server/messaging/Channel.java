@@ -97,11 +97,15 @@ public class Channel {
 
                 try {
                     socket.receive(packet);
-                    controller.processMessage(packet.getData(), packet.getLength(), packet.getAddress(), packet.getPort());
+                    controller.processMessage(packet.getData(), packet.getLength(), packet.getAddress());
                 } catch (IOException e) {
                     e.printStackTrace();
                 }
             }
         }).start();
+    }
+
+    public int getPort() {
+        return port;
     }
 }

@@ -2,6 +2,8 @@ package server;
 
 import server.messaging.Channel;
 
+import java.net.DatagramSocket;
+import java.net.SocketException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -26,12 +28,13 @@ public class Server {
 
     // File Deletion
     public static final String DELETE_INIT = "DELETE";
+    public static final String DELETE_GET_LEASE = "GETLEASE";
+    public static final String DELETE_ACCEPT_LEASE = "LEASEOK";
 
     // Space Reclaiming
     public static final String RECLAIM_SUCESS = "REMOVED";
     public static final int RECLAIM_REPLY_MIN_DELAY = 0;
     public static final int RECLAIM_REPLY_MAX_DELAY = 400;
-
 
     public static final byte CR = 0xD;
     public static final byte LF = 0xA;

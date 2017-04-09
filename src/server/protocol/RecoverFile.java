@@ -3,8 +3,11 @@ package server.protocol;
 import server.Controller;
 import server.messaging.MessageBuilder;
 
+import java.io.DataInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -21,6 +24,7 @@ public class RecoverFile {
     private final ConcurrentHashMap<Integer, byte[]> receivedChunks;
     private int currentChunk = 0;
     private ExecutorService threadPool;
+    private ServerSocket recoverySocket;
 
     public RecoverFile(String filename, String fileId) {
         this.filename = filename;
@@ -37,6 +41,11 @@ public class RecoverFile {
     public boolean start(Controller controller) {
         this.controller = controller;
 
+        /*If protocol version is greater than 1.0, starts listening to the TCP recoverySocket from messages*/
+        if (getProtocolVersion() > 1.0)
+            createServerSocket();
+
+
         while (!receivedAllChunks()) {
             threadPool = Executors.newFixedThreadPool(CHUNKS_PER_REQUEST);
             System.out.println("Requesting chunks " + currentChunk + " to " + (currentChunk + CHUNKS_PER_REQUEST - 1) + " for fileId " + fileId + "...");
@@ -49,7 +58,7 @@ public class RecoverFile {
 
             threadPool.shutdown();
             try {
-                if (!threadPool.awaitTermination(CHUNKS_PER_REQUEST / 2, TimeUnit.SECONDS)) {
+                if (!threadPool.awaitTermination(CHUNKS_PER_REQUEST * 2, TimeUnit.SECONDS)) {
                     do {
                         threadPool.shutdownNow();
                     } while (!threadPool.isTerminated());
@@ -124,6 +133,13 @@ public class RecoverFile {
     private boolean recoverFile() {
         FileOutputStream fileOutputStream;
 
+        if (recoverySocket != null) {
+            try {
+                recoverySocket.close();
+            } catch (IOException ignored) {
+            }
+        }
+
         try {
             fileOutputStream = new FileOutputStream(getFile(RESTORED_DIR + filename));
         } catch (IOException e) {
@@ -160,5 +176,67 @@ public class RecoverFile {
      */
     public boolean hasChunk(int chunkNo) {
         return receivedChunks.containsKey(chunkNo);
+    }
+
+    /**
+     * Starts reading from recoverySocket if protocol version is greater than 1.0
+     */
+    private void createServerSocket() {
+        try {
+            recoverySocket = new ServerSocket(controller.getRecoveryChannelPort());
+        } catch (IOException e) {
+            System.out.println("Could not open ServerSocket for file recovery.");
+            return;
+        }
+
+        ExecutorService socketThreadPool = Executors.newFixedThreadPool(CHUNKS_PER_REQUEST);
+        new Thread(() -> {
+            while (true) {
+                try {
+                    Socket socket = recoverySocket.accept();
+                    socketThreadPool.submit(() -> listenToSocket(socket));
+                } catch (IOException e) {
+                    System.out.println("Closed socket.");
+                    socketThreadPool.shutdownNow();
+                    return;
+                }
+            }
+        }).start();
+    }
+
+    /**
+     * Listens to the recoverySocket for messages.
+     *
+     * @param recoverySocket
+     */
+    private void listenToSocket(Socket recoverySocket) {
+        DataInputStream dataInputStream;
+
+        try {
+            dataInputStream = new DataInputStream(recoverySocket.getInputStream());
+        } catch (IOException e) {
+            System.out.println("Error creating DataInputStream from TCP Socket...");
+            e.printStackTrace();
+            return;
+        }
+
+        while (true) {
+            try {
+                int messageSize = dataInputStream.readInt();
+                System.out.println(messageSize);
+
+                byte[] buffer = new byte[messageSize];
+                dataInputStream.readFully(buffer);
+
+                controller.processMessage(buffer, buffer.length, null);
+            } catch (IOException e) {
+                System.out.println("Error reading from TCP recoverySocket. Closing socket...");
+                try {
+                    recoverySocket.close();
+                } catch (IOException ignored) {
+                }
+                return;
+            }
+        }
     }
 }
