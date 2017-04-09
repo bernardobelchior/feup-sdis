@@ -110,9 +110,9 @@ public class Backup {
             byte[] effectiveChunk = chunk;
 
                /* Add chunk to Incompleted Tasks HashMap */
-            if(getProtocolVersion() > 1.0){
-                controller.getIncompletedTasks().putIfAbsent(getFileId(), new ConcurrentSkipListSet<>());
-                controller.getIncompletedTasks().get(getFileId()).add(chunkNo);
+            if (getProtocolVersion() > 1.0) {
+                controller.getIncompleteTasks().putIfAbsent(getFileId(), new ConcurrentSkipListSet<>());
+                controller.getIncompleteTasks().get(getFileId()).add(chunkNo);
             }
 
             if (size != CHUNK_SIZE)

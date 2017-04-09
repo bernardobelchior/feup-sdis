@@ -22,21 +22,6 @@ public class Server {
     public static final int CHUNK_SIZE = 64 * 1000;
 
     /**
-     * Directory in which all other directories will be saved.
-     */
-    static String BASE_DIR;
-
-    /**
-     * Directory in which restored files will be saved.
-     */
-    public static final String RESTORED_DIR = "RestoredFiles/";
-
-    /**
-     * Directory in which chunks will be stored.
-     */
-    static final String CHUNK_DIR = "Chunks/";
-
-    /**
      * Protocol version.
      */
     private static double protocolVersion;
@@ -54,16 +39,17 @@ public class Server {
         serverId = Integer.parseInt(args[1]);
         String serviceAccessPoint = args[2];
 
-        BASE_DIR = serverId + "/";
-
         System.out.println("Starting server with id " + serverId + " and protocol version " + protocolVersion + ".");
         System.out.println("Access Point: " + serviceAccessPoint);
 
         Channel controlChannel = new Channel(args[3], args[4]);
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
+        FileManager fileManager = new FileManager(
+                (long) (Math.pow(1000, 2) * 8), /* 8 Megabytes */
+                Integer.toString(serverId));
 
-        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel);
+        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel, fileManager);
 
         InitiatorPeer initiatorPeer = null;
 

@@ -105,7 +105,7 @@ class LeaseManager {
             leaseScheduledExecutor.schedule(() -> sendLeaseMessage(fileId), LEASE_DURATION, TimeUnit.SECONDS);
         } else {
             System.out.println("Lease license expired for fileId " + fileId + ".");
-            controller.deleteFile(fileId);
+            controller.fileManager.deleteFile(fileId);
         }
     }
 
