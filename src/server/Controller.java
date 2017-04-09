@@ -2,6 +2,7 @@ package server;
 
 
 import server.messaging.Channel;
+import server.messaging.MessageParser;
 import server.protocol.Backup;
 import server.protocol.Recover;
 
@@ -233,17 +234,17 @@ public class Controller {
             ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message, 0, size);
 
             try {
-                String[] headerFields = parseHeader(byteArrayInputStream).split(" ");
-                double protocolVersion = parseProtocolVersion(headerFields[1]);
-                int senderId = parseSenderId(headerFields[2]);
-                checkFileIdValidity(headerFields[3]);
+                String[] headerFields = parseHeader(byteArrayInputStream).trim().split(" ");
+                double protocolVersion = MessageParser.parseProtocolVersion(headerFields[1]);
+                int senderId = MessageParser.parseSenderId(headerFields[2]);
+                MessageParser.checkFileIdValidity(headerFields[3]);
 
                 int chunkNo = 0;
                 int replicationDegree = 0;
                 if (headerFields.length > 4) {
-                    chunkNo = parseChunkNo(headerFields[4]);
+                    chunkNo = MessageParser.parseChunkNo(headerFields[4]);
                     if (headerFields.length > 5)
-                        replicationDegree = parseReplicationDegree(headerFields[5]);
+                        replicationDegree = MessageParser.parseReplicationDegree(headerFields[5]);
                 }
 
                 if (headerFields.length < 3)
@@ -328,7 +329,7 @@ public class Controller {
         if (senderId == getServerId()) // Same sender
             return;
 
-        checkFileIdValidity(fileId);
+        MessageParser.checkFileIdValidity(fileId);
 
         /* If the server is backing up this file, it cannot store chunks from the same file */
         if (backedUpFiles.containsKey(fileId))
@@ -446,12 +447,12 @@ public class Controller {
         System.out.println("Requested chunk number " + chunkNo + " of fileId " + fileId + ".");
 
         /* If the requested chunk is not stored in our server, then do nothing. */
-        if (!storedChunks.get(fileId).contains(chunkNo)) {
+        if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunkNo)) {
             System.out.println("But the chunk is not stored in this server.");
             return;
         }
 
-        checkFileIdValidity(fileId);
+        MessageParser.checkFileIdValidity(fileId);
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
@@ -681,7 +682,8 @@ public class Controller {
 
     /**
      * Decrements replication degree
-     * @param fileId File Id
+     *
+     * @param fileId  File Id
      * @param chunkNo Chunk number
      */
     private void decrementReplicationDegree(String fileId, int chunkNo) {
