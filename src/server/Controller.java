@@ -168,7 +168,7 @@ public class Controller {
             ByteArrayInputStream byteArrayInputStream = new ByteArrayInputStream(message, 0, size);
 
             try {
-                String[] headerFields = parseHeader(byteArrayInputStream).split(" ");
+                String[] headerFields = parseHeader(byteArrayInputStream).trim().split(" ");
                 double protocolVersion = parseProtocolVersion(headerFields[1]);
                 int senderId = parseSenderId(headerFields[2]);
                 checkFileIdValidity(headerFields[3]);
