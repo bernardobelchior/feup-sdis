@@ -604,7 +604,7 @@ public class Controller {
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
-    /***
+    /**
      * Decrements replication degree
      * @param fileId File Id
      * @param chunkNo Chunk number
