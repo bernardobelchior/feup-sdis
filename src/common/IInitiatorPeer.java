@@ -34,7 +34,7 @@ public interface IInitiatorPeer extends Remote {
      *
      * @param spaceReserved Number of bytes to allocate to the backup service.
      */
-    void reclaim(int spaceReserved);
+    void reclaim(int spaceReserved) throws RemoteException;
 
     /**
      * Gives information about the current state of the server.

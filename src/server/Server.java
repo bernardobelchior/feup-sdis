@@ -2,7 +2,6 @@ package server;
 
 import server.messaging.Channel;
 
-import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
@@ -29,7 +28,7 @@ public class Server {
     private static double protocolVersion;
     private static int serverId;
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InstantiationException {
         /* Needed for Mac OS X */
         System.setProperty("java.net.preferIPv4Stack", "true");
 
@@ -46,13 +45,7 @@ public class Server {
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
 
-        Controller controller;
-        try {
-            controller = new Controller(controlChannel, backupChannel, recoveryChannel);
-        } catch (InstantiationException e) {
-            System.err.println("Could not instantiate Controller.");
-            return;
-        }
+        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel);
 
         InitiatorPeer initiatorPeer = null;
 
@@ -64,8 +57,8 @@ public class Server {
 
         try {
             Registry registry = LocateRegistry.getRegistry();
-            registry.bind(serviceAccessPoint, initiatorPeer);
-        } catch (RemoteException | AlreadyBoundException e) {
+            registry.rebind(serviceAccessPoint, initiatorPeer);
+        } catch (RemoteException e) {
             e.printStackTrace();
         }
     }
