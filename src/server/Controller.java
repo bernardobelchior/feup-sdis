@@ -2,6 +2,7 @@ package server;
 
 
 import server.messaging.Channel;
+import server.messaging.MessageParser;
 import server.protocol.Backup;
 import server.protocol.Recover;
 
@@ -169,16 +170,16 @@ public class Controller {
 
             try {
                 String[] headerFields = parseHeader(byteArrayInputStream).trim().split(" ");
-                double protocolVersion = parseProtocolVersion(headerFields[1]);
-                int senderId = parseSenderId(headerFields[2]);
-                checkFileIdValidity(headerFields[3]);
+                double protocolVersion = MessageParser.parseProtocolVersion(headerFields[1]);
+                int senderId = MessageParser.parseSenderId(headerFields[2]);
+                MessageParser.checkFileIdValidity(headerFields[3]);
 
                 int chunkNo = 0;
                 int replicationDegree = 0;
                 if (headerFields.length > 4) {
-                    chunkNo = parseChunkNo(headerFields[4]);
+                    chunkNo = MessageParser.parseChunkNo(headerFields[4]);
                     if (headerFields.length > 5)
-                        replicationDegree = parseReplicationDegree(headerFields[5]);
+                        replicationDegree = MessageParser.parseReplicationDegree(headerFields[5]);
                 }
 
                 if (headerFields.length < 3)
@@ -263,7 +264,7 @@ public class Controller {
         if (senderId == getServerId()) // Same sender
             return;
 
-        checkFileIdValidity(fileId);
+        MessageParser.checkFileIdValidity(fileId);
 
         /* If the server is backing up this file, it cannot store chunks from the same file */
         if (backedUpFiles.containsKey(fileId))
@@ -376,7 +377,7 @@ public class Controller {
             return;
         }
 
-        checkFileIdValidity(fileId);
+        MessageParser.checkFileIdValidity(fileId);
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
