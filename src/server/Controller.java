@@ -142,36 +142,32 @@ public class Controller {
         incompletedTasks.forEachEntry(10, file -> {
             String fileId = file.getKey();
             for (Integer chunk : file.getValue()) {
-                try {
 
-                    System.out.println("Chunk no " + chunk + "do file " + fileId);
+                if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunk)) {
+                    System.out.println("Deleting chunks...");
+                    String filename = backedUpFiles.get(fileId);
+                    int replicationDegree = desiredReplicationDegrees.get(fileId);
 
-                    if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunk)) {
+                    sendToControlChannel(createMessage(
+                            DELETE_INIT,
+                            Double.toString(getProtocolVersion()),
+                            Integer.toString(getServerId()),
+                            fileId));
 
-                        System.out.println("Deleting chunks...");
-                        String filename = backedUpFiles.get(fileId);
-                        int replicationDegree = desiredReplicationDegrees.get(fileId);
+                    incompletedTasks.remove(fileId);
 
-                        sendToControlChannel(createMessage(
-                                DELETE_INIT,
-                                Double.toString(getProtocolVersion()),
-                                Integer.toString(getServerId()),
-                                fileId));
-
-                        incompletedTasks.remove(fileId);
-
-                        try {
-                            Thread.sleep(Backup.BACKUP_REPLY_MAX_DELAY);
-                        } catch (InterruptedException e) {
-                            e.printStackTrace();
-                        }
-
-                        startFileBackup(new Backup(filename, replicationDegree));
-                        return;
+                    try {
+                        Thread.sleep(Backup.BACKUP_REPLY_MAX_DELAY);
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
                     }
 
+                    startFileBackup(new Backup(filename, replicationDegree));
+                    return;
+                }
 
-                    System.out.println("Starting to send PUTCHUNK AGAIN ");
+                try {
+                    System.out.println("Sending message " + BACKUP_INIT);
 
                     byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunk));
 
@@ -425,6 +421,7 @@ public class Controller {
         if (getProtocolVersion() > 1.0) {
             if(incompletedTasks.containsKey(fileId)){
                 incompletedTasks.get(fileId).remove(chunkNo);
+
                 if(incompletedTasks.get(fileId).isEmpty())
                     incompletedTasks.remove(fileId);
             }
@@ -620,12 +617,8 @@ public class Controller {
 
         System.out.println("Ready to start backup...");
 
-             /* Add chunk to Incompleted Tasks HashMap */
+        /* Add chunk to Incompleted Tasks HashMap */
         if(getProtocolVersion() > 1.0){
-
-            System.out.println("TENHO O CHUNK.... VOU tratar DOS PUT CHUNKS");
-
-            System.out.println("GUARDAR NAS TASKS..." + chunkNo + " do file " + fileId);
             incompletedTasks.putIfAbsent(fileId, new ConcurrentSkipListSet<>());
             incompletedTasks.get(fileId).add(chunkNo);
         }
