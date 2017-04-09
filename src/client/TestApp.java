@@ -22,7 +22,7 @@ class TestApp {
             Registry registry = LocateRegistry.getRegistry("localhost"); //TODO: This is part of peerAcessPoint
             initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
-            e.printStackTrace();
+            System.out.println("Could not find connect to peer with access point: " + peerAccessPoint);
             return;
         }
 
@@ -53,7 +53,7 @@ class TestApp {
             case "DELETE":
                 pathName = args[2];
                 try {
-                    if(initiatorPeer.delete(pathName))
+                    if (initiatorPeer.delete(pathName))
                         System.out.println("File deletion successful.");
                     else
                         System.out.println("File deletion failed.");

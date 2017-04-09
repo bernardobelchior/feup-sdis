@@ -1,11 +1,13 @@
 package server.protocol;
 
 import server.Controller;
-import server.Server;
 import server.messaging.MessageBuilder;
 
-import java.io.*;
-import java.net.*;
+import java.io.DataInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -15,15 +17,14 @@ import static server.Server.*;
 import static server.Utils.getFile;
 
 public class RecoverFile {
-    private static final int CHUNKS_PER_REQUEST = 10;
+    private static final int CHUNKS_PER_REQUEST = 5;
     private final String filename;
     private final String fileId;
     private Controller controller;
     private final ConcurrentHashMap<Integer, byte[]> receivedChunks;
     private int currentChunk = 0;
     private ExecutorService threadPool;
-    private ServerSocket recoverySocket;
-    private Socket socket;
+    private Socket recoverySocket;
 
     public RecoverFile(String filename, String fileId) {
         this.filename = filename;
@@ -40,8 +41,8 @@ public class RecoverFile {
     public boolean start(Controller controller) {
         this.controller = controller;
 
-        /*If protocol version is greater than 1.0, starts listening to the udp socket from messages*/
-        if(getProtocolVersion()>1.0)
+        /*If protocol version is greater than 1.0, starts listening to the TCP recoverySocket from messages*/
+        if (getProtocolVersion() > 1.0)
             startReadingFromSocket();
 
 
@@ -57,7 +58,7 @@ public class RecoverFile {
 
             threadPool.shutdown();
             try {
-                if (!threadPool.awaitTermination(CHUNKS_PER_REQUEST / 2, TimeUnit.SECONDS)) {
+                if (!threadPool.awaitTermination(CHUNKS_PER_REQUEST * 10, TimeUnit.SECONDS)) {
                     do {
                         threadPool.shutdownNow();
                     } while (!threadPool.isTerminated());
@@ -171,47 +172,47 @@ public class RecoverFile {
     }
 
     /**
-     * Starts reading from socket if protocol version is greater than 1.0
+     * Starts reading from recoverySocket if protocol version is greater than 1.0
      */
-    public void startReadingFromSocket(){
-        try {
-            recoverySocket = new ServerSocket(this.controller.getRecoveryChannel().getPort());
-            new Thread(()->{
-                try {
-                    socket = recoverySocket.accept();
-                    listenToSocket();
-                } catch (IOException e) {
-                    e.printStackTrace();
-                }
-            }).start();
-        } catch (IOException e) {
-            System.out.println("Finished TCP connection...");
-        }
-    }
-    /**
-     * Listens to the socket for messages.
-     */
-    public void listenToSocket() {
-
+    private void startReadingFromSocket() {
         new Thread(() -> {
-
-            while (true) {
-
-                try {
-                    DataInputStream dataInputStream = new DataInputStream(socket.getInputStream());
-                    int messageSize = dataInputStream.readInt();
-
-                    byte[] buffer = new byte[messageSize];
-                    if (messageSize > 0) {
-                        dataInputStream.readFully(buffer);
-                    }
-
-                    controller.processMessage(buffer, buffer.length, null);
-                } catch (IOException e) {
-                    System.out.println("Finished TCP connection...");
-                }
+            try {
+                recoverySocket = new ServerSocket(controller.getRecoveryChannelPort()).accept();
+                listenToSocket();
+            } catch (IOException e) {
+                System.out.println("Could not create a TCP connection...");
             }
-
         }).start();
+    }
+
+    /**
+     * Listens to the recoverySocket for messages.
+     */
+    private void listenToSocket() {
+        ExecutorService processingThreadPool = Executors.newFixedThreadPool(CHUNKS_PER_REQUEST);
+        DataInputStream dataInputStream;
+
+        try {
+            dataInputStream = new DataInputStream(recoverySocket.getInputStream());
+        } catch (IOException e) {
+            System.out.println("Error creating DataInputStream from TCP Socket...");
+            e.printStackTrace();
+            return;
+        }
+
+        while (true) {
+            try {
+                int messageSize = dataInputStream.readInt();
+                System.out.println(messageSize);
+
+                byte[] buffer = new byte[messageSize];
+                dataInputStream.readFully(buffer);
+
+                processingThreadPool.submit(() -> controller.processMessage(buffer, buffer.length, null));
+            } catch (IOException e) {
+                System.out.println("Error reading from TCP recoverySocket...");
+                e.printStackTrace();
+            }
+        }
     }
 }
