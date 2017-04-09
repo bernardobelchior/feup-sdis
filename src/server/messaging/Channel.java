@@ -108,8 +108,4 @@ public class Channel {
     public int getPort() {
         return port;
     }
-
-    public InetAddress getAddress() {
-        return address;
-    }
 }

@@ -1,4 +1,5 @@
 package server.protocol;
+
 import server.Controller;
 import server.Utils;
 import server.messaging.MessageBuilder;
@@ -68,7 +69,6 @@ public class BackupFile {
 
             if (oldBytesRead == CHUNK_SIZE)
                 backedUpChunks.add(backupChunk(chunkNo, chunk, 0));
-
         } catch (IOException e) {
             e.printStackTrace();
         }

@@ -54,9 +54,8 @@ public class Controller {
     /* Maps FileId to Filename */
     private ConcurrentHashMap<String, String> backedUpFiles;
 
-    private DataOutputStream recoverySocketOutputStream = null;
-
     private final LeaseTimer leaseTimer;
+    private Socket recoverySocket;
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) throws InstantiationException {
         this.controlChannel = controlChannel;
@@ -171,15 +170,12 @@ public class Controller {
                         processStoredMessage(headerFields[3], chunkNo);
                         break;
                     case RESTORE_INIT:
-                        System.out.println("Received message " + headerFields[0] + " from " + senderId);
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
                         processGetChunkMessage(protocolVersion, senderId, headerFields[3], chunkNo, senderAddr);
                         break;
                     case RESTORE_SUCCESS:
-                        System.out.println("Received message " + headerFields[0] + " from " + senderId);
-
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
@@ -383,10 +379,9 @@ public class Controller {
      */
     private void createRecoverySocket(InetAddress senderAddress) {
         try {
-            recoverySocketOutputStream = new DataOutputStream(new Socket(senderAddress, recoveryChannel.getPort()).getOutputStream());
+            recoverySocket = new Socket(senderAddress, recoveryChannel.getPort());
         } catch (IOException e) {
-            System.out.println("Error creating TCP socket...");
-            e.printStackTrace();
+            System.out.println("Error creating TCP socket.");
         }
     }
 
@@ -397,21 +392,39 @@ public class Controller {
      * @param senderAddress Sender InetAddress
      */
     private void sendMessageToSocket(byte[] message, InetAddress senderAddress) {
-        if (recoverySocketOutputStream == null)
+        if (recoverySocket == null || recoverySocket.isClosed())
             createRecoverySocket(senderAddress);
+
+        DataOutputStream recoverySocketOutputStream;
+        try {
+            recoverySocketOutputStream = new DataOutputStream(recoverySocket.getOutputStream());
+        } catch (IOException e) {
+            System.out.println("Error creating DataOutputStream for recovery socket.");
+            try {
+                recoverySocket.close();
+            } catch (IOException ignored) {
+            }
+            return;
+        }
 
         try {
             if (message.length > 0) {
-                ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-                byteArrayOutputStream.write(message.length);
-                System.out.println(message.length);
-                byteArrayOutputStream.write(message);
-                recoverySocketOutputStream.write(byteArrayOutputStream.toByteArray());
+                ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                DataOutputStream dos = new DataOutputStream(baos);
+                dos.writeInt(message.length);
+                dos.write(message);
+
+                recoverySocketOutputStream.write(baos.toByteArray());
             }
         } catch (IOException e) {
-            System.out.println("Error writing message to recovery socket...");
-        }
+            System.out.println("Error writing message to recovery socket.");
+            try {
+                recoverySocket.close();
+            } catch (IOException ignored) {
+            }
 
+            return;
+        }
     }
 
     /**
@@ -842,7 +855,7 @@ public class Controller {
 
                 sb.append("\n\t\t\tSize: ");
                 try {
-                    sb.append(Files.size(getChunkPath(fileChunk.getKey(), chunkNo)) / 1000);
+                    sb.append(Files.size(getChunkPath(fileChunk.getKey(), chunkNo)) / 1000f);
                     sb.append(" KB");
                 } catch (IOException e) {
                     sb.append("Could not open chunk.");
