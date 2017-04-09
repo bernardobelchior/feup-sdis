@@ -2,8 +2,8 @@ package server;
 
 
 import server.messaging.Channel;
-import server.protocol.BackupFile;
-import server.protocol.RecoverFile;
+import server.protocol.Backup;
+import server.protocol.Recover;
 
 import java.io.*;
 import java.net.InetAddress;
@@ -22,39 +22,77 @@ import static server.messaging.MessageParser.parseHeader;
 
 public class Controller {
 
+    /**
+     * Control channel
+     */
     private final Channel controlChannel;
+    /**
+     * Backup channel
+     */
     private final Channel backupChannel;
+    /**
+     * Recovery channel
+     */
     private final Channel recoveryChannel;
 
-    /*Concurrent HashMap with fileId and respective RecoverFile object*/
-    private final ConcurrentHashMap<String, RecoverFile> ongoingRecoveries = new ConcurrentHashMap<>();
+    /**
+     * Concurrent HashMap with fileId and respective Recover object
+     */
+    private final ConcurrentHashMap<String, Recover> ongoingRecoveries = new ConcurrentHashMap<>();
 
-    /*Concurrent HashMap with String (fileId + chunkNo) and respective ExecutorService, responsible for schedule processRestoredMessage function*/
+    /**
+     * Concurrent HashMap with String (fileId + chunkNo) and respective ExecutorService, responsible for schedule processRestoredMessage function
+     */
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToSend = new ConcurrentHashMap<>();
 
-    /*Concurrent HashMap with fileId and Concurrent HashMap with file's chunkNo and respective replication degree*/
+    /**
+     * Concurrent HashMap with fileId and Concurrent HashMap with file's chunkNo and respective replication degree
+     */
     private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> chunkCurrentReplicationDegree;
 
-    /*Concurrent HashMap with fileId and respective desired Replication Degree*/
+    /**
+     * Concurrent HashMap with fileId and respective desired Replication Degree
+     */
     private ConcurrentHashMap<String, Integer> desiredReplicationDegrees;
 
-    /*Concurrent HashMap with fileId and respective ExecuterService for chunks prepared to be backed up */
+    /**
+     * Concurrent HashMap with fileId and respective ExecuterService for chunks prepared to be backed up
+     */
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToBackUp = new ConcurrentHashMap<>();
 
-    /*Server's stored chunks*/
+    /**
+     * Server's stored chunks
+     */
     private ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> storedChunks;
 
-    /* Max storage size allowed, in bytes */
+    /**
+     * Max storage size allowed, in bytes
+     */
     private int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
 
-    /* Storage size used to store chunks. Value is updated on backup and delete protocol*/
+    /**
+     * Storage size used to store chunks. Value is updated on backup and delete protocol
+     */
     private volatile long usedSpace;
+
+    /**
+     * Lock to synchronize usedSpace.
+     */
     private final Object usedSpaceLock = new Object();
 
-    /* Maps FileId to Filename */
+    /**
+     * Maps FileId to Filename
+     */
     private ConcurrentHashMap<String, String> backedUpFiles;
 
+    /**
+     * Lease Timer, used for delete enhancement.
+     */
     private final LeaseTimer leaseTimer;
+
+    /**
+     * Socket used for restore enhancement.
+     */
     private Socket recoverySocket;
 
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) throws InstantiationException {
@@ -151,31 +189,31 @@ public class Controller {
                     throw new InvalidHeaderException("A valid messaging header requires at least 3 fields.");
 
                 switch (headerFields[0]) {
-                    case BACKUP_INIT:
+                    case Backup.BACKUP_INIT:
                         if (headerFields.length != 6)
                             throw new InvalidHeaderException("A chunk backup header must have exactly 6 fields. Received " + headerFields.length + ".");
 
                         if (getProtocolVersion() > 1.0 & protocolVersion > 1.0)
                             try {
-                                Thread.sleep(randomBetween(BACKUP_REPLY_MIN_DELAY, BACKUP_REPLY_MAX_DELAY));
+                                Thread.sleep(randomBetween(Backup.BACKUP_REPLY_MIN_DELAY, Backup.BACKUP_REPLY_MAX_DELAY));
                             } catch (InterruptedException ignored) {
                             }
 
                         processBackupMessage(byteArrayInputStream, protocolVersion, senderId, headerFields[3], chunkNo, replicationDegree);
                         break;
-                    case BACKUP_SUCCESS:
+                    case Backup.BACKUP_SUCCESS:
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk stored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
                         processStoredMessage(headerFields[3], chunkNo);
                         break;
-                    case RESTORE_INIT:
+                    case Recover.RESTORE_INIT:
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A get chunk header must have exactly 5 fields. Received " + headerFields.length + ".");
 
                         processGetChunkMessage(protocolVersion, senderId, headerFields[3], chunkNo, senderAddr);
                         break;
-                    case RESTORE_SUCCESS:
+                    case Recover.RESTORE_SUCCESS:
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk restored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
@@ -282,7 +320,7 @@ public class Controller {
             leaseTimer.startLease(fileId);
 
         byte[] message = createMessage(
-                BACKUP_SUCCESS,
+                Backup.BACKUP_SUCCESS,
                 Double.toString(getProtocolVersion()),
                 Integer.toString(getServerId()),
                 fileId,
@@ -291,7 +329,7 @@ public class Controller {
         if (getProtocolVersion() > 1.0 && protocolVersion > 1.0)
             controlChannel.sendMessage(message);
         else
-            controlChannel.sendMessageWithRandomDelay(message, BACKUP_REPLY_MIN_DELAY, BACKUP_REPLY_MAX_DELAY);
+            controlChannel.sendMessageWithRandomDelay(message, Backup.BACKUP_REPLY_MIN_DELAY, Backup.BACKUP_REPLY_MAX_DELAY);
     }
 
     /**
@@ -353,7 +391,7 @@ public class Controller {
 
         byte[] message = createMessage(
                 chunkBody,
-                RESTORE_SUCCESS,
+                Recover.RESTORE_SUCCESS,
                 Double.toString(getProtocolVersion()),
                 Integer.toString(getServerId()),
                 fileId,
@@ -366,7 +404,7 @@ public class Controller {
             executorService.schedule(() -> {
                 System.out.println("Retrieving chunk " + chunkNo + " of fileId " + fileId + "...");
                 controlChannel.sendMessage(message);
-            }, randomBetween(RESTORE_REPLY_MIN_DELAY, RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
+            }, randomBetween(Recover.RESTORE_REPLY_MIN_DELAY, Recover.RESTORE_REPLY_MAX_DELAY), TimeUnit.MILLISECONDS);
         }
 
 
@@ -439,18 +477,18 @@ public class Controller {
         if (serverId == getServerId()) //Same sender
             return;
 
-        System.out.println("Received " + RESTORE_SUCCESS + " from " + serverId + " for fileId " + fileId + " and chunk number " + chunkNo);
+        System.out.println("Received " + Recover.RESTORE_SUCCESS + " from " + serverId + " for fileId " + fileId + " and chunk number " + chunkNo);
 
         ScheduledExecutorService chunkToSend = chunksToSend.get(getChunkId(fileId, chunkNo));
 
         /* If there is a chunk waiting to be sent, then delete it because someone sent it first. */
         if (chunkToSend != null) {
-            System.out.println("Received " + RESTORE_SUCCESS + " for fileId " + fileId + " chunk number " + chunkNo + ". Discarding...");
+            System.out.println("Received " + Recover.RESTORE_SUCCESS + " for fileId " + fileId + " chunk number " + chunkNo + ". Discarding...");
             chunkToSend.shutdownNow();
             chunksToSend.remove(getChunkId(fileId, chunkNo));
         }
 
-        RecoverFile recover = ongoingRecoveries.get(fileId);
+        Recover recover = ongoingRecoveries.get(fileId);
 
         /* If this server is not currently trying to restore the file, then do nothing. */
         if (recover == null)
@@ -515,7 +553,7 @@ public class Controller {
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
                         chunkBody,
-                        Server.BACKUP_INIT,
+                        Backup.BACKUP_INIT,
                         Double.toString(getProtocolVersion()),
                         Integer.toString(getServerId()),
                         fileId,
@@ -626,16 +664,21 @@ public class Controller {
     /**
      * Starts file backup
      *
-     * @param backupFile File backup protocol.
+     * @param backup File backup protocol.
      * @return Returns true if the backup was successful.
      */
-    public boolean startFileBackup(BackupFile backupFile) {
-        ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
-        chunkCurrentReplicationDegree.put(backupFile.getFileId(), chunksReplicationDegree);
-        desiredReplicationDegrees.putIfAbsent(backupFile.getFileId(), backupFile.getDesiredReplicationDegree());
-        backedUpFiles.put(backupFile.getFileId(), backupFile.getFilename());
+    public boolean startFileBackup(Backup backup) {
+        if (desiredReplicationDegrees.containsKey(backup.getFileId())) {
+            System.out.println("File is already backed up in the network.");
+            return true;
+        }
 
-        boolean ret = backupFile.start(this, chunksReplicationDegree);
+        ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
+        chunkCurrentReplicationDegree.put(backup.getFileId(), chunksReplicationDegree);
+        desiredReplicationDegrees.put(backup.getFileId(), backup.getDesiredReplicationDegree());
+        backedUpFiles.put(backup.getFileId(), backup.getFilename());
+
+        boolean ret = backup.start(this, chunksReplicationDegree);
         saveServerMetadata();
         return ret;
     }
@@ -643,19 +686,19 @@ public class Controller {
     /**
      * Starts file recovery
      *
-     * @param recoverFile recoverFile to be recovered
+     * @param recover recover to be recovered
      * @return true If file was successfully restored
      */
-    public boolean startFileRecovery(RecoverFile recoverFile) {
+    public boolean startFileRecovery(Recover recover) {
         /* If the fileId does not exist in the network */
-        if (desiredReplicationDegrees.get(recoverFile.getFileId()) == null) {
+        if (desiredReplicationDegrees.get(recover.getFileId()) == null) {
             System.err.println("File not found in the network.");
             return false;
         }
 
-        ongoingRecoveries.put(recoverFile.getFileId(), recoverFile);
+        ongoingRecoveries.put(recover.getFileId(), recover);
 
-        boolean ret = recoverFile.start(this);
+        boolean ret = recover.start(this);
         saveServerMetadata();
         return ret;
     }

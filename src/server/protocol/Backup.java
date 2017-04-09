@@ -15,7 +15,15 @@ import java.util.concurrent.*;
 
 import static server.Server.*;
 
-public class BackupFile {
+public class Backup {
+    /* All time-related constants are in milliseconds */
+    // Chunk Backup
+    public static final String BACKUP_INIT = "PUTCHUNK";
+    public static final String BACKUP_SUCCESS = "STORED";
+    public static final int BACKUP_TIMEOUT = 1000;
+    public static final int MAX_BACKUP_ATTEMPTS = 5;
+    public static final int BACKUP_REPLY_MIN_DELAY = 0;
+    public static final int BACKUP_REPLY_MAX_DELAY = 400;
     private final String filename;
 
 
@@ -28,7 +36,7 @@ public class BackupFile {
 
     private Controller controller;
 
-    public BackupFile(String filename, int desiredReplicationDegree) {
+    public Backup(String filename, int desiredReplicationDegree) {
         this.filename = filename;
         this.desiredReplicationDegree = desiredReplicationDegree;
         file = new File(filename);

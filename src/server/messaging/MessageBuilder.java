@@ -1,13 +1,15 @@
 package server.messaging;
 
-import server.Server;
-
 import java.io.ByteArrayOutputStream;
 
 /**
  * Message builder class.
  */
 public class MessageBuilder {
+    public static final byte CR = 0xD;
+    public static final byte LF = 0xA;
+    public static final String CRLF = "" + (char) CR + (char) LF;
+
     /**
      * Creates the messaging that only uses a header.
      * Header format:
@@ -17,7 +19,7 @@ public class MessageBuilder {
      * @return Message
      */
     public static byte[] createMessage(String... headerFields) {
-        return (String.join(" ", headerFields) + " " + Server.CRLF + Server.CRLF).getBytes();
+        return (String.join(" ", headerFields) + " " + CRLF + CRLF).getBytes();
     }
 
     /**

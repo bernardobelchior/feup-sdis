@@ -2,30 +2,12 @@ package server;
 
 import server.messaging.Channel;
 
-import java.net.DatagramSocket;
-import java.net.SocketException;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 public class Server {
-    /* All time-related constants are in milliseconds */
-    // Chunk Backup
-    public static final String BACKUP_INIT = "PUTCHUNK";
-    public static final String BACKUP_SUCCESS = "STORED";
-    public static final int BACKUP_TIMEOUT = 1000;
-    public static final int MAX_BACKUP_ATTEMPTS = 5;
-    public static final int BACKUP_REPLY_MIN_DELAY = 0;
-    public static final int BACKUP_REPLY_MAX_DELAY = 400;
-
-    // Chunk Restore
-    public static final String RESTORE_INIT = "GETCHUNK";
-    public static final String RESTORE_SUCCESS = "CHUNK";
-    public static final int RESTORE_TIMEOUT = 1000;
-    public static final int RESTORE_REPLY_MIN_DELAY = 0;
-    public static final int RESTORE_REPLY_MAX_DELAY = 400;
-
     // File Deletion
     public static final String DELETE_INIT = "DELETE";
     public static final String DELETE_GET_LEASE = "GETLEASE";
@@ -35,10 +17,6 @@ public class Server {
     public static final String RECLAIM_SUCESS = "REMOVED";
     public static final int RECLAIM_REPLY_MIN_DELAY = 0;
     public static final int RECLAIM_REPLY_MAX_DELAY = 400;
-
-    public static final byte CR = 0xD;
-    public static final byte LF = 0xA;
-    public static final String CRLF = "" + (char) CR + (char) LF;
 
     /* Sizes in bytes */
     public static final int MAX_HEADER_SIZE = 512;

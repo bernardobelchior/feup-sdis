@@ -4,8 +4,8 @@ import server.InvalidHeaderException;
 
 import java.io.ByteArrayInputStream;
 
-import static server.Server.CR;
-import static server.Server.LF;
+import static server.messaging.MessageBuilder.CR;
+import static server.messaging.MessageBuilder.LF;
 
 
 public class MessageParser {

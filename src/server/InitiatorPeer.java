@@ -1,8 +1,8 @@
 package server;
 
 import common.IInitiatorPeer;
-import server.protocol.BackupFile;
-import server.protocol.RecoverFile;
+import server.protocol.Backup;
+import server.protocol.Recover;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
@@ -23,7 +23,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
         System.out.println("Starting backup of file with filename " + filename
                 + " with replication degree of " + replicationDegree + "...");
 
-        return controller.startFileBackup(new BackupFile(filename, replicationDegree));
+        return controller.startFileBackup(new Backup(filename, replicationDegree));
     }
 
     @Override
@@ -32,7 +32,7 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
 
         System.out.println("Starting restore of file with fileId " + fileId + "...");
 
-        return controller.startFileRecovery(new RecoverFile(filename, fileId));
+        return controller.startFileRecovery(new Recover(filename, fileId));
     }
 
     /**

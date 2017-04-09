@@ -16,7 +16,13 @@ import java.util.concurrent.TimeUnit;
 import static server.Server.*;
 import static server.Utils.getFile;
 
-public class RecoverFile {
+public class Recover {
+    // Chunk Restore
+    public static final String RESTORE_INIT = "GETCHUNK";
+    public static final String RESTORE_SUCCESS = "CHUNK";
+    public static final int RESTORE_TIMEOUT = 1000;
+    public static final int RESTORE_REPLY_MIN_DELAY = 0;
+    public static final int RESTORE_REPLY_MAX_DELAY = 400;
     private static final int CHUNKS_PER_REQUEST = 10;
     private final String filename;
     private final String fileId;
@@ -26,7 +32,7 @@ public class RecoverFile {
     private ExecutorService threadPool;
     private ServerSocket recoverySocket;
 
-    public RecoverFile(String filename, String fileId) {
+    public Recover(String filename, String fileId) {
         this.filename = filename;
         this.fileId = fileId;
         receivedChunks = new ConcurrentHashMap<>();
@@ -196,7 +202,6 @@ public class RecoverFile {
                     Socket socket = recoverySocket.accept();
                     socketThreadPool.submit(() -> listenToSocket(socket));
                 } catch (IOException e) {
-                    System.out.println("Closed socket.");
                     socketThreadPool.shutdownNow();
                     return;
                 }
@@ -223,7 +228,6 @@ public class RecoverFile {
         while (true) {
             try {
                 int messageSize = dataInputStream.readInt();
-                System.out.println(messageSize);
 
                 byte[] buffer = new byte[messageSize];
                 dataInputStream.readFully(buffer);
