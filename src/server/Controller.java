@@ -13,12 +13,14 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.Set;
 import java.util.concurrent.*;
 
 import static server.Server.*;
 import static server.Utils.*;
 import static server.messaging.MessageBuilder.createMessage;
 import static server.messaging.MessageParser.parseHeader;
+import static server.protocol.Backup.BACKUP_INIT;
 
 public class Controller {
 
@@ -95,6 +97,11 @@ public class Controller {
      */
     private Socket recoverySocket;
 
+    /**
+     * Concurrent HashMap with fileId and respective chunk No waiting to be stored
+     */
+    private ConcurrentHashMap<String,ConcurrentSkipListSet<Integer>> incompletedTasks;
+
     public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
@@ -108,6 +115,7 @@ public class Controller {
             desiredReplicationDegrees = new ConcurrentHashMap<>();
             chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
             backedUpFiles = new ConcurrentHashMap<>();
+            incompletedTasks = new ConcurrentHashMap<>();
             maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
             usedSpace = 0;
         }
@@ -120,7 +128,73 @@ public class Controller {
         this.backupChannel.listen();
         this.recoveryChannel.listen();
 
+        if(getProtocolVersion() > 1.0)
+            completeTasks();
+
         Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(this::saveServerMetadata, 5, 5, TimeUnit.SECONDS);
+
+    }
+
+    private void completeTasks(){
+
+        if(incompletedTasks.isEmpty()){
+            System.out.println("ALL TASK COMPLETED");
+            return;
+        }
+
+        System.out.println("HAS INCOMPLETE TASK");
+
+        incompletedTasks.forEachEntry(10, file -> {
+            String fileId = file.getKey();
+            for (Integer chunk : file.getValue()) {
+                try {
+                    if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunk)) {
+
+                        System.out.println("Deleted All Chunks !!!!!!!!!! ");
+
+
+                        String filename = backedUpFiles.get(fileId);
+                        int replicationDegree = desiredReplicationDegrees.get(fileId);
+
+                        System.out.println("Filename: " + filename);
+                        System.out.println("Replication Degree" + replicationDegree);
+
+                        sendToControlChannel(createMessage(
+                                DELETE_INIT,
+                                Double.toString(getProtocolVersion()),
+                                Integer.toString(getServerId()),
+                                fileId));
+
+                        incompletedTasks.remove(fileId);
+
+                        try {
+                            Thread.sleep(Backup.BACKUP_REPLY_MAX_DELAY);
+                        } catch (InterruptedException e) {
+                            e.printStackTrace();
+                        }
+
+                        startFileBackup(new Backup(filename, replicationDegree));
+                        return;
+                    }
+
+                    byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunk));
+
+                    sendToBackupChannel(createMessage(chunkBody,
+                            BACKUP_INIT,
+                            Double.toString(getProtocolVersion()),
+                            Integer.toString(getServerId()),
+                            fileId,
+                            Integer.toString(chunk)));
+
+
+
+                } catch (IOException e) {
+                    System.out.println("Error getting chunk path");
+                }
+            }
+        });
+
+
     }
 
     private void initializeDirs() {
@@ -185,7 +259,7 @@ public class Controller {
                     throw new InvalidHeaderException("A valid messaging header requires at least 3 fields.");
 
                 switch (headerFields[0]) {
-                    case Backup.BACKUP_INIT:
+                    case BACKUP_INIT:
                         if (headerFields.length != 6)
                             throw new InvalidHeaderException("A chunk backup header must have exactly 6 fields. Received " + headerFields.length + ".");
 
@@ -350,6 +424,19 @@ public class Controller {
      * @param chunkNo Chunk number
      */
     private void processStoredMessage(String fileId, int chunkNo) {
+
+         /* Peer that initiated backup marks backup task as completed */
+        if (getProtocolVersion() > 1.0) {
+
+            System.out.println("Complete Task...");
+
+            if(incompletedTasks.containsKey(fileId)){
+                incompletedTasks.get(fileId).remove(chunkNo);
+                if(incompletedTasks.get(fileId).isEmpty())
+                    incompletedTasks.remove(fileId);
+            }
+        }
+
         incrementReplicationDegree(fileId, chunkNo);
     }
 
@@ -543,7 +630,7 @@ public class Controller {
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
                         chunkBody,
-                        Backup.BACKUP_INIT,
+                        BACKUP_INIT,
                         Double.toString(getProtocolVersion()),
                         Integer.toString(getServerId()),
                         fileId,
@@ -785,6 +872,7 @@ public class Controller {
             desiredReplicationDegrees = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
             chunkCurrentReplicationDegree = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
             backedUpFiles = (ConcurrentHashMap<String, String>) objectInputStream.readObject();
+            incompletedTasks = (ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject();
         } catch (IOException e) {
             System.err.println("Could not read from configuration file.");
             return false;
@@ -832,6 +920,7 @@ public class Controller {
             objectOutputStream.writeObject(desiredReplicationDegrees);
             objectOutputStream.writeObject(chunkCurrentReplicationDegree);
             objectOutputStream.writeObject(backedUpFiles);
+            objectOutputStream.writeObject(incompletedTasks);
             System.out.println("Server metadata successfully saved.");
         } catch (IOException e) {
             System.err.println("Could not write to configuration file.");
@@ -923,6 +1012,15 @@ public class Controller {
      */
     public int getRecoveryChannelPort() {
         return recoveryChannel.getPort();
+    }
+
+
+    /**
+     * Gets Incompleted Tasks HashMap
+     * @return Returns Incompleted Tasks HashMap
+     */
+    public ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> getIncompletedTasks() {
+        return incompletedTasks;
     }
 
     /**
