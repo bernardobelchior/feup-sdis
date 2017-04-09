@@ -418,9 +418,6 @@ public class Controller {
 
          /* Peer that initiated backup marks backup task as completed */
         if (getProtocolVersion() > 1.0) {
-
-            System.out.println("Complete Task...");
-
             if(incompletedTasks.containsKey(fileId)){
                 incompletedTasks.get(fileId).remove(chunkNo);
                 if(incompletedTasks.get(fileId).isEmpty())
