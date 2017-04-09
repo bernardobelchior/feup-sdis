@@ -1,9 +1,9 @@
 package server;
 
-public class ChunkReplication {
-    private String fileId;
-    private int chunkNo;
-    private int replicationDifference;
+class ChunkReplication {
+    private final String fileId;
+    private final int chunkNo;
+    private final int replicationDifference;
 
     public ChunkReplication(String fileId, int chunkNo, int replicationDifference) {
         this.fileId = fileId;

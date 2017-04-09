@@ -134,9 +134,8 @@ public class Utils {
      * @param fileId  File Id
      * @param chunkNo Chunk number
      * @return Path to file.
-     * @throws IOException
      */
-    public static Path getChunkPath(String fileId, int chunkNo) throws IOException {
+    public static Path getChunkPath(String fileId, int chunkNo) {
         return getFile(CHUNK_DIR + fileId + chunkNo).toPath();
     }
 
@@ -145,7 +144,6 @@ public class Utils {
      *
      * @param filepath Path to file.
      * @return File
-     * @throws IOException
      */
     public static File getFile(String filepath) {
         return new File(BASE_DIR + filepath);

@@ -63,11 +63,7 @@ class TestApp {
                 break;
             case "RECLAIM":
                 int maximumDiskSpace = Integer.parseInt(args[2]);
-                try {
-                    initiatorPeer.reclaim(maximumDiskSpace);
-                } catch (java.io.IOException e) {
-                    e.printStackTrace();
-                }
+                initiatorPeer.reclaim(maximumDiskSpace);
                 break;
             case "STATE":
                 try {

@@ -6,7 +6,6 @@ import server.protocol.Recover;
 
 import javax.xml.bind.DatatypeConverter;
 import java.io.File;
-import java.io.IOException;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
@@ -51,9 +50,9 @@ public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer
     }
 
     @Override
-    public boolean reclaim(int spaceReserved) throws IOException {
+    public void reclaim(int spaceReserved) {
         System.out.println("Starting space reclaiming with space reserved of " + spaceReserved + " KBytes");
-        return controller.startReclaim(spaceReserved * 1000);
+        controller.startReclaim(spaceReserved * 1000);
     }
 
     @Override

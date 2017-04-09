@@ -20,8 +20,8 @@ public class Backup {
     // Chunk Backup
     public static final String BACKUP_INIT = "PUTCHUNK";
     public static final String BACKUP_SUCCESS = "STORED";
-    public static final int BACKUP_TIMEOUT = 1000;
-    public static final int MAX_BACKUP_ATTEMPTS = 5;
+    private static final int BACKUP_TIMEOUT = 1000;
+    private static final int MAX_BACKUP_ATTEMPTS = 5;
     public static final int BACKUP_REPLY_MIN_DELAY = 0;
     public static final int BACKUP_REPLY_MAX_DELAY = 400;
     private final String filename;

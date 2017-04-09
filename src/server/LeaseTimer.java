@@ -11,13 +11,13 @@ import static server.Server.*;
 import static server.Utils.randomBetween;
 import static server.messaging.MessageBuilder.createMessage;
 
-public class LeaseTimer {
+class LeaseTimer {
     private static final int LEASE_TIMER = 60; // In seconds
     private static final int LEASE_TIMEOUT = 1; // In seconds
     private static final int LEASE_MIN_DELAY = 0; // In milliseconds
     private static final int LEASE_MAX_DELAY = 400; // In milliseconds
 
-    private Controller controller;
+    private final Controller controller;
     private final Channel controlChannel;
     private final ScheduledExecutorService leaseScheduledExecutor = Executors.newScheduledThreadPool(5);
     private final ConcurrentHashMap<String, Boolean> filesLeaseState = new ConcurrentHashMap<>();

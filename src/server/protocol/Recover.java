@@ -20,7 +20,7 @@ public class Recover {
     // Chunk Restore
     public static final String RESTORE_INIT = "GETCHUNK";
     public static final String RESTORE_SUCCESS = "CHUNK";
-    public static final int RESTORE_TIMEOUT = 1000;
+    private static final int RESTORE_TIMEOUT = 1000;
     public static final int RESTORE_REPLY_MIN_DELAY = 0;
     public static final int RESTORE_REPLY_MAX_DELAY = 400;
     private static final int CHUNKS_PER_REQUEST = 10;
@@ -212,7 +212,7 @@ public class Recover {
     /**
      * Listens to the recoverySocket for messages.
      *
-     * @param recoverySocket
+     * @param recoverySocket Recovery socket.
      */
     private void listenToSocket(Socket recoverySocket) {
         DataInputStream dataInputStream;

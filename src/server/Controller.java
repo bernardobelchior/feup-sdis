@@ -56,7 +56,7 @@ public class Controller {
     private ConcurrentHashMap<String, Integer> desiredReplicationDegrees;
 
     /**
-     * Concurrent HashMap with fileId and respective ExecuterService for chunks prepared to be backed up
+     * Concurrent HashMap with fileId and respective {@link ExecutorService} for chunks prepared to be backed up
      */
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToBackUp = new ConcurrentHashMap<>();
 
@@ -95,18 +95,13 @@ public class Controller {
      */
     private Socket recoverySocket;
 
-    public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) throws InstantiationException {
+    public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
         leaseTimer = new LeaseTimer(this, controlChannel);
 
-        try {
-            initializeDirs();
-        } catch (IOException e) {
-            System.err.println("Could not initialize directories. Exiting...");
-            throw new InstantiationException();
-        }
+        initializeDirs();
 
         if (!loadServerMetadata()) {
             storedChunks = new ConcurrentHashMap<>();
@@ -127,7 +122,7 @@ public class Controller {
         Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(this::saveServerMetadata, 5, 5, TimeUnit.SECONDS);
     }
 
-    private void initializeDirs() throws IOException {
+    private void initializeDirs() {
         new File(BASE_DIR).mkdir();
         new File(BASE_DIR + CHUNK_DIR).mkdir();
         new File(BASE_DIR + RESTORED_DIR).mkdir();
@@ -154,9 +149,9 @@ public class Controller {
     /**
      * Sends Delete message to Control Channel
      *
-     * @param message
+     * @param message Message to send
      */
-    public void sendToControlChannel(byte[] message) {
+    private void sendToControlChannel(byte[] message) {
         controlChannel.sendMessage(message);
     }
 
@@ -262,7 +257,6 @@ public class Controller {
      * @param chunkNo                  Chunk number
      * @param desiredReplicationDegree Replication degree
      * @throws InvalidHeaderException In case of malformed header arguments.
-     * @throws IOException            In case of error storing the received chunk.
      */
     private void processBackupMessage(ByteArrayInputStream byteArrayInputStream, double protocolVersion, int senderId, String fileId, int chunkNo, int desiredReplicationDegree) throws InvalidHeaderException {
         if (senderId == getServerId()) // Same sender
@@ -353,9 +347,8 @@ public class Controller {
      *
      * @param fileId  File Id
      * @param chunkNo Chunk number
-     * @throws IOException
      */
-    private void processStoredMessage(String fileId, int chunkNo) throws IOException {
+    private void processStoredMessage(String fileId, int chunkNo) {
         incrementReplicationDegree(fileId, chunkNo);
     }
 
@@ -460,8 +453,6 @@ public class Controller {
                 recoverySocket.close();
             } catch (IOException ignored) {
             }
-
-            return;
         }
     }
 
@@ -508,9 +499,8 @@ public class Controller {
      *
      * @param serverId Server Id
      * @param fileId   File Id
-     * @throws IOException In case of error getting chunk path
      */
-    private void processDeleteMessage(int serverId, String fileId) throws IOException {
+    private void processDeleteMessage(int serverId, String fileId) {
         System.out.println("Received " + DELETE_INIT + " from " + serverId + " for file " + fileId);
 
         if (deleteFile(fileId)) {
@@ -570,7 +560,7 @@ public class Controller {
      * @param serverId      Server Id
      * @param fileId        File Id
      */
-    public void processGetLease(double serverVersion, int serverId, String fileId) {
+    private void processGetLease(double serverVersion, int serverId, String fileId) {
         if (serverVersion == 1 || serverId == getServerId())
             return;
 
@@ -596,7 +586,7 @@ public class Controller {
      * @param serverId      Server Id
      * @param fileId        File Id
      */
-    public void processLeaseOk(double serverVersion, int serverId, String fileId) {
+    private void processLeaseOk(double serverVersion, int serverId, String fileId) {
         if (serverVersion == 1 || serverId == getServerId())
             return;
 
@@ -631,9 +621,8 @@ public class Controller {
      *
      * @param fileId  File Id
      * @param chunkNo Chunk number
-     * @throws IOException If the chunk could not be deleted.
      */
-    public void deleteChunk(String fileId, Integer chunkNo) {
+    private void deleteChunk(String fileId, Integer chunkNo) {
         System.out.println("Deleting chunkNo " + chunkNo + " from file" + fileId);
 
          /* Deletes chunk and then updates the used space. */
@@ -728,15 +717,13 @@ public class Controller {
      * @param storageSize Desired storage size in KBytes (1 KByte = 1000 Byte).
      * @return Returns true if the desired storage size can be set.
      */
-    public boolean startReclaim(int storageSize) {
+    public void startReclaim(int storageSize) {
         if (storageSize > maxStorageSize) {
             maxStorageSize = storageSize;
-            return true;
         } else {
             maxStorageSize = storageSize;
-            boolean ret = reclaimSpace();
+            reclaimSpace();
             saveServerMetadata();
-            return ret;
         }
     }
 
@@ -745,7 +732,7 @@ public class Controller {
      *
      * @return Returns true if the reclaim space process was successful.
      */
-    public boolean reclaimSpace() {
+    private void reclaimSpace() {
         PriorityQueue<ChunkReplication> leastNecessaryChunks = new PriorityQueue<>(new ChunkReplicationComparator());
 
         storedChunks.forEachEntry(10, file -> {
@@ -757,7 +744,7 @@ public class Controller {
         });
 
         if (leastNecessaryChunks.isEmpty())
-            return true;
+            return;
 
         /* Chunk with Replication Degree greater than Desired Replication Degree */
         while (usedSpace > maxStorageSize) {
@@ -773,9 +760,6 @@ public class Controller {
                             leastNecessaryChunk.getFileId(),
                             Integer.toString(leastNecessaryChunk.getChunkNo())));
         }
-
-        //TODO: Wait for replication degree to be acceptable.
-        return true;
     }
 
     /**
@@ -927,7 +911,7 @@ public class Controller {
      * @param chunkSize chunk size
      * @return Returns true if peers has available space to store chunk
      */
-    public boolean hasSpaceAvailable(int chunkSize) {
+    private boolean hasSpaceAvailable(int chunkSize) {
         return usedSpace + (long) chunkSize < maxStorageSize;
     }
 

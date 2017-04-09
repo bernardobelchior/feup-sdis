@@ -8,7 +8,7 @@ import java.io.ByteArrayOutputStream;
 public class MessageBuilder {
     public static final byte CR = 0xD;
     public static final byte LF = 0xA;
-    public static final String CRLF = "" + (char) CR + (char) LF;
+    private static final String CRLF = "" + (char) CR + (char) LF;
 
     /**
      * Creates the messaging that only uses a header.

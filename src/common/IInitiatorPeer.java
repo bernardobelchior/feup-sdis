@@ -1,6 +1,5 @@
 package common;
 
-import java.io.IOException;
 import java.rmi.Remote;
 import java.rmi.RemoteException;
 
@@ -9,7 +8,7 @@ import java.rmi.RemoteException;
  */
 public interface IInitiatorPeer extends Remote {
     /**
-     * Backs up the file with {@filename} and have at least {@replicationDegree} copies of each chunk at any time.
+     * Backs up the file with {@param filename} and have at least {@param replicationDegree} copies of each chunk at any time.
      *
      * @param filename          Name of file to backup.
      * @param replicationDegree Number of copies of each chunk to keep around at any time.
@@ -35,7 +34,7 @@ public interface IInitiatorPeer extends Remote {
      *
      * @param spaceReserved Number of bytes to allocate to the backup service.
      */
-    boolean reclaim(int spaceReserved) throws IOException;
+    void reclaim(int spaceReserved);
 
     /**
      * Gives information about the current state of the server.

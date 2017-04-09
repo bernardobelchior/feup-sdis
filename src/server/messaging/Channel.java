@@ -71,22 +71,6 @@ public class Channel {
     }
 
     /**
-     * Sends a message to a specified address and port.
-     *
-     * @param message Message to send.
-     * @param senderAddr  Sender address and port.
-     */
-    public void sendMessageTo(byte[] message, InetAddress senderAddr, int senderPort) {
-        DatagramPacket packet = new DatagramPacket(message, message.length, senderAddr, senderPort);
-
-        try {
-            socket.send(packet);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    /**
      * Listens to the socket for messages.
      */
     public void listen() {
@@ -100,6 +84,7 @@ public class Channel {
                     controller.processMessage(packet.getData(), packet.getLength(), packet.getAddress());
                 } catch (IOException e) {
                     e.printStackTrace();
+                    return;
                 }
             }
         }).start();
