@@ -372,7 +372,7 @@ public class Controller {
         System.out.println("Requested chunk number " + chunkNo + " of fileId " + fileId + ".");
 
         /* If the requested chunk is not stored in our server, then do nothing. */
-        if (!storedChunks.get(fileId).contains(chunkNo)) {
+        if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunkNo)) {
             System.out.println("But the chunk is not stored in this server.");
             return;
         }
@@ -607,7 +607,8 @@ public class Controller {
 
     /**
      * Decrements replication degree
-     * @param fileId File Id
+     *
+     * @param fileId  File Id
      * @param chunkNo Chunk number
      */
     private void decrementReplicationDegree(String fileId, int chunkNo) {
