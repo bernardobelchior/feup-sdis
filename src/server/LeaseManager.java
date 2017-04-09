@@ -11,7 +11,7 @@ import static server.Server.*;
 import static server.Utils.randomBetween;
 import static server.messaging.MessageBuilder.createMessage;
 
-class LeaseTimer {
+class LeaseManager {
     /**
      * Lease duration in seconds.
      */
@@ -50,29 +50,39 @@ class LeaseTimer {
     /**
      * Maps fileId to lease validity.
      */
-    private final ConcurrentHashMap<String, Boolean> filesLeaseState = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Boolean> fileLeaseValidity = new ConcurrentHashMap<>();
 
-    LeaseTimer(Controller controller, Channel controlChannel) {
+    LeaseManager(Controller controller, Channel controlChannel) {
         this.controller = controller;
         this.controlChannel = controlChannel;
     }
 
+    /**
+     * Starts the lease of the file with fileId.
+     *
+     * @param fileId FileId
+     */
     public void startLease(String fileId) {
-        if (!filesLeaseState.containsKey(fileId)) {
-            filesLeaseState.put(fileId, true);
+        if (!fileLeaseValidity.containsKey(fileId)) {
+            fileLeaseValidity.put(fileId, true);
             leaseScheduledExecutor.schedule(() -> sendLeaseMessage(fileId), LEASE_DURATION, TimeUnit.SECONDS);
         }
     }
 
+    /**
+     * Sends a message to renew lease.
+     *
+     * @param fileId FileId
+     */
     private void sendLeaseMessage(String fileId) {
-        filesLeaseState.put(fileId, false);
+        fileLeaseValidity.put(fileId, false);
 
         try {
             Thread.sleep(randomBetween(LEASE_MIN_DELAY, LEASE_MAX_DELAY));
         } catch (InterruptedException ignored) {
         }
 
-        if (!filesLeaseState.get(fileId)) {
+        if (!fileLeaseValidity.get(fileId)) {
             controlChannel.sendMessage(createMessage(
                     DELETE_GET_LEASE,
                     Double.toString(getProtocolVersion()),
@@ -84,25 +94,40 @@ class LeaseTimer {
         leaseScheduledExecutor.schedule(() -> verifyLease(fileId), LEASE_TIMEOUT, TimeUnit.SECONDS);
     }
 
+    /**
+     * Verifies the lease state.
+     *
+     * @param fileId File id
+     */
     private void verifyLease(String fileId) {
-        if (!filesLeaseState.getOrDefault(fileId, false)) {
-            controller.deleteFile(fileId);
+        /* If the lease is valid, then schedule the next check. Otherwise, end the lease. */
+        if (fileLeaseValidity.getOrDefault(fileId, false)) {
+            leaseScheduledExecutor.schedule(() -> sendLeaseMessage(fileId), LEASE_DURATION, TimeUnit.SECONDS);
+        } else {
             System.out.println("Lease license expired for fileId " + fileId + ".");
-            return;
+            controller.deleteFile(fileId);
         }
-
-        leaseScheduledExecutor.schedule(() -> sendLeaseMessage(fileId), LEASE_DURATION, TimeUnit.SECONDS);
     }
 
-    public void leaseRenewed(String fileId) {
-        if (!filesLeaseState.getOrDefault(fileId, false)) {
-            filesLeaseState.put(fileId, true);
+    /**
+     * Renews the lease for fileId.
+     *
+     * @param fileId
+     */
+    public void leaseRenew(String fileId) {
+        if (!fileLeaseValidity.getOrDefault(fileId, false)) {
+            fileLeaseValidity.put(fileId, true);
             System.out.println("Renewed license for fileId " + fileId + ".");
         }
     }
 
-    public void leaseEnded(String fileId) {
-        filesLeaseState.remove(fileId);
+    /**
+     * Ends the lease for fileId.
+     *
+     * @param fileId
+     */
+    public void leaseEnd(String fileId) {
+        fileLeaseValidity.remove(fileId);
     }
 
 }

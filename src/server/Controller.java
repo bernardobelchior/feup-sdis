@@ -68,7 +68,7 @@ public class Controller {
     /**
      * Max storage size allowed, in bytes
      */
-    private int maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
+    private int maxStorageSize;
 
     /**
      * Storage size used to store chunks. Value is updated on backup and delete protocol
@@ -88,7 +88,7 @@ public class Controller {
     /**
      * Lease Timer, used for delete enhancement.
      */
-    private final LeaseTimer leaseTimer;
+    private final LeaseManager leaseManager;
 
     /**
      * Socket used for restore enhancement.
@@ -99,7 +99,7 @@ public class Controller {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
-        leaseTimer = new LeaseTimer(this, controlChannel);
+        leaseManager = new LeaseManager(this, controlChannel);
 
         initializeDirs();
 
@@ -108,6 +108,7 @@ public class Controller {
             desiredReplicationDegrees = new ConcurrentHashMap<>();
             chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
             backedUpFiles = new ConcurrentHashMap<>();
+            maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
             usedSpace = 0;
         }
 
@@ -311,7 +312,7 @@ public class Controller {
         storedChunks.putIfAbsent(fileId, fileStoredChunks);
 
         if (getProtocolVersion() > 1)
-            leaseTimer.startLease(fileId);
+            leaseManager.startLease(fileId);
 
         byte[] message = createMessage(
                 Backup.BACKUP_SUCCESS,
@@ -505,7 +506,6 @@ public class Controller {
 
         if (deleteFile(fileId)) {
             System.out.println("Successfully deleted file " + fileId);
-            backedUpFiles.remove(fileId);
         } else
             System.out.println("Could not delete file " + fileId);
     }
@@ -573,9 +573,7 @@ public class Controller {
                     "" + getServerId(),
                     fileId
             ));
-            leaseTimer.leaseRenewed(fileId);
-        } else {
-            System.out.println("Unknown fileId, license not renewed.");
+            leaseManager.leaseRenew(fileId);
         }
     }
 
@@ -590,7 +588,7 @@ public class Controller {
         if (serverVersion == 1 || serverId == getServerId())
             return;
 
-        leaseTimer.leaseRenewed(fileId);
+        leaseManager.leaseRenew(fileId);
     }
 
     /**
@@ -704,7 +702,6 @@ public class Controller {
             return false;
         }
 
-
         sendToControlChannel(createMessage(
                 DELETE_INIT,
                 Double.toString(getProtocolVersion()),
@@ -783,7 +780,7 @@ public class Controller {
         }
 
         try {
-            backedUpFiles = (ConcurrentHashMap<String, String>) objectInputStream.readObject();
+            maxStorageSize = objectInputStream.readInt();
             storedChunks = (ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject();
             desiredReplicationDegrees = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
             chunkCurrentReplicationDegree = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
@@ -814,7 +811,7 @@ public class Controller {
      * Starts the leasing of every file stored.
      */
     private void leaseStoredFiles() {
-        storedChunks.forEachKey(10, leaseTimer::startLease);
+        storedChunks.forEachKey(10, leaseManager::startLease);
     }
 
     /**
@@ -830,7 +827,7 @@ public class Controller {
         }
 
         try {
-            objectOutputStream.writeObject(backedUpFiles);
+            objectOutputStream.writeInt(maxStorageSize);
             objectOutputStream.writeObject(storedChunks);
             objectOutputStream.writeObject(desiredReplicationDegrees);
             objectOutputStream.writeObject(chunkCurrentReplicationDegree);
@@ -936,17 +933,24 @@ public class Controller {
     public boolean deleteFile(String fileId) {
         ConcurrentSkipListSet<Integer> chunksToDelete = storedChunks.get(fileId);
 
-        if (chunksToDelete == null)
+        if (chunksToDelete == null) {
+            backedUpFiles.remove(fileId);
+            desiredReplicationDegrees.remove(fileId);
+            chunkCurrentReplicationDegree.remove(fileId);
+            backedUpFiles.remove(fileId);
             return true;
+        }
 
         chunksToDelete.forEach(chunkNo -> deleteChunk(fileId, chunkNo));
 
         if (chunksToDelete.isEmpty()) {
+            backedUpFiles.remove(fileId);
             desiredReplicationDegrees.remove(fileId);
             chunkCurrentReplicationDegree.remove(fileId);
             backedUpFiles.remove(fileId);
+
             if (getProtocolVersion() > 1)
-                leaseTimer.leaseEnded(fileId);
+                leaseManager.leaseEnd(fileId);
             return true;
         } else
             return false;
