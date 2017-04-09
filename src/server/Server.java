@@ -21,11 +21,29 @@ public class Server {
     public static final int MAX_HEADER_SIZE = 512;
     public static final int CHUNK_SIZE = 64 * 1000;
 
-    public static final String RESTORED_DIR = "RestoredFiles/";
-    public static final String CHUNK_DIR = "Chunks/";
-    public static String BASE_DIR;
+    /**
+     * Directory in which all other directories will be saved.
+     */
+    static String BASE_DIR;
 
+    /**
+     * Directory in which restored files will be saved.
+     */
+    public static final String RESTORED_DIR = "RestoredFiles/";
+
+    /**
+     * Directory in which chunks will be stored.
+     */
+    static final String CHUNK_DIR = "Chunks/";
+
+    /**
+     * Protocol version.
+     */
     private static double protocolVersion;
+
+    /**
+     * Server Id.
+     */
     private static int serverId;
 
     public static void main(String[] args) throws InstantiationException {

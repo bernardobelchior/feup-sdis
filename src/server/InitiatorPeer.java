@@ -11,6 +11,9 @@ import java.rmi.server.UnicastRemoteObject;
 
 public class InitiatorPeer extends UnicastRemoteObject implements IInitiatorPeer {
 
+    /**
+     * Controller class.
+     */
     private final Controller controller;
 
     public InitiatorPeer(Controller controller) throws RemoteException {

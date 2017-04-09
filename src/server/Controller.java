@@ -704,8 +704,12 @@ public class Controller {
             return false;
         }
 
-        byte[] message = createMessage(Server.DELETE_INIT, Double.toString(getProtocolVersion()), Integer.toString(getServerId()), fileId);
-        sendToControlChannel(message);
+
+        sendToControlChannel(createMessage(
+                DELETE_INIT,
+                Double.toString(getProtocolVersion()),
+                Integer.toString(getServerId()),
+                fileId));
 
         saveServerMetadata();
         return true;
@@ -754,7 +758,7 @@ public class Controller {
             System.out.println("Successfully deleted chunk number " + leastNecessaryChunk.getChunkNo() + " belonging to fileId " + leastNecessaryChunk.getFileId() + ".");
 
             controlChannel.sendMessage(
-                    createMessage(Server.RECLAIM_SUCESS,
+                    createMessage(RECLAIM_SUCESS,
                             Double.toString(getProtocolVersion()),
                             Integer.toString(getServerId()),
                             leastNecessaryChunk.getFileId(),

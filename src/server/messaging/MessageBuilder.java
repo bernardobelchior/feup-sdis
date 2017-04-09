@@ -6,8 +6,19 @@ import java.io.ByteArrayOutputStream;
  * Message builder class.
  */
 public class MessageBuilder {
+    /**
+     * Carriage return.
+     */
     public static final byte CR = 0xD;
+
+    /**
+     * Line feed
+     */
     public static final byte LF = 0xA;
+
+    /**
+     * Carriage return and line feed joined.
+     */
     private static final String CRLF = "" + (char) CR + (char) LF;
 
     /**
