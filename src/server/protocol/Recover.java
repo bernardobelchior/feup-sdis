@@ -1,6 +1,7 @@
 package server.protocol;
 
 import server.Controller;
+import server.FileManager;
 import server.messaging.MessageBuilder;
 
 import java.io.DataInputStream;
@@ -14,7 +15,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static server.Server.*;
-import static server.Utils.getFile;
 
 public class Recover {
     // Chunk Restore
@@ -27,6 +27,7 @@ public class Recover {
     private final String filename;
     private final String fileId;
     private Controller controller;
+    private FileManager fileManager;
     private final ConcurrentHashMap<Integer, byte[]> receivedChunks;
     private int currentChunk = 0;
     private ExecutorService threadPool;
@@ -44,8 +45,9 @@ public class Recover {
      * @param controller Controller that handles message sending.
      * @return Returns true if the file has been successfully restored, returning false otherwise.
      */
-    public boolean start(Controller controller) {
+    public boolean start(Controller controller, FileManager fileManager) {
         this.controller = controller;
+        this.fileManager = fileManager;
 
         /*If protocol version is greater than 1.0, starts listening to the TCP recoverySocket from messages*/
         if (getProtocolVersion() > 1.0)
@@ -147,7 +149,7 @@ public class Recover {
         }
 
         try {
-            fileOutputStream = new FileOutputStream(getFile(RESTORED_DIR + filename));
+            fileOutputStream = new FileOutputStream(fileManager.getRestoredFilePath(filename));
         } catch (IOException e) {
             System.err.println("Error opening file for recovery.");
             return false;

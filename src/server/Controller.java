@@ -6,7 +6,10 @@ import server.messaging.MessageParser;
 import server.protocol.Backup;
 import server.protocol.Recover;
 
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Files;
@@ -14,9 +17,9 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.*;
 
-import static server.FileManager.getDirectorySize;
 import static server.Server.*;
-import static server.Utils.*;
+import static server.Utils.getChunkId;
+import static server.Utils.randomBetween;
 import static server.messaging.MessageBuilder.createMessage;
 import static server.messaging.MessageParser.parseHeader;
 
@@ -93,14 +96,8 @@ public class Controller {
         fileManager.setController(this);
         leaseManager = new LeaseManager(this, controlChannel);
 
-        initializeDirs();
-
-        if (!loadServerMetadata()) {
-            storedChunks = new ConcurrentHashMap<>();
-            desiredReplicationDegrees = new ConcurrentHashMap<>();
-            chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
-            backedUpFiles = new ConcurrentHashMap<>();
-        }
+        if (!fileManager.loadServerMetadata())
+            newMetadata();
 
         this.controlChannel.setController(this);
         this.backupChannel.setController(this);
@@ -110,13 +107,7 @@ public class Controller {
         this.backupChannel.listen();
         this.recoveryChannel.listen();
 
-        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(this::saveServerMetadata, 5, 5, TimeUnit.SECONDS);
-    }
-
-    private void initializeDirs() {
-        new File(BASE_DIR).mkdir();
-        new File(BASE_DIR + CHUNK_DIR).mkdir();
-        new File(BASE_DIR + RESTORED_DIR).mkdir();
+        Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(fileManager::saveServerMetadata, 5, 5, TimeUnit.SECONDS);
     }
 
     /**
@@ -283,7 +274,7 @@ public class Controller {
                 System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
                 incrementReplicationDegree(fileId, chunkNo);
             } else {
-                System.out.println("Not enough space to backup chunk " + chunkNo + " from fileId " + fileId + ".");
+                System.out.println("Not enough space to store chunk " + chunkNo + " from fileId " + fileId + ".");
                 return;
             }
         } catch (IOException e) {
@@ -352,7 +343,7 @@ public class Controller {
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToSend.put(getChunkId(fileId, chunkNo), executorService);
 
-        byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunkNo));
+        byte[] chunkBody = Files.readAllBytes(fileManager.getChunkPath(fileId, chunkNo));
 
         byte[] message = createMessage(
                 chunkBody,
@@ -507,7 +498,7 @@ public class Controller {
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToBackUp.put(getChunkId(fileId, chunkNo), executorService);
 
-        byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunkNo));
+        byte[] chunkBody = fileManager.loadChunk(fileId, chunkNo);
 
         System.out.println("Ready to start backup...");
 
@@ -609,7 +600,7 @@ public class Controller {
         backedUpFiles.put(backup.getFileId(), backup.getFilename());
 
         boolean ret = backup.start(this, chunksReplicationDegree);
-        saveServerMetadata();
+        fileManager.saveServerMetadata();
         return ret;
     }
 
@@ -628,8 +619,8 @@ public class Controller {
 
         ongoingRecoveries.put(recover.getFileId(), recover);
 
-        boolean ret = recover.start(this);
-        saveServerMetadata();
+        boolean ret = recover.start(this, fileManager);
+        fileManager.saveServerMetadata();
         return ret;
     }
 
@@ -651,7 +642,7 @@ public class Controller {
                 Integer.toString(getServerId()),
                 fileId));
 
-        saveServerMetadata();
+        fileManager.saveServerMetadata();
         return true;
     }
 
@@ -666,7 +657,7 @@ public class Controller {
 
         if (!fileManager.hasSpaceAvailable()) {
             reclaimSpace();
-            saveServerMetadata();
+            fileManager.saveServerMetadata();
         }
     }
 
@@ -706,80 +697,11 @@ public class Controller {
     }
 
     /**
-     * Loads server metadata.
-     *
-     * @return True if the metadata was correctly loaded.
-     */
-    @SuppressWarnings("unchecked")
-    private boolean loadServerMetadata() {
-        ObjectInputStream objectInputStream;
-
-        try {
-            objectInputStream = new ObjectInputStream(new FileInputStream(getFile("." + getServerId())));
-        } catch (IOException e) {
-            System.err.println("Could not open configuration file for reading.");
-            return false;
-        }
-
-        try {
-            fileManager.setMaxStorageSize(objectInputStream.readLong());
-            storedChunks = (ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject();
-            desiredReplicationDegrees = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
-            chunkCurrentReplicationDegree = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
-            backedUpFiles = (ConcurrentHashMap<String, String>) objectInputStream.readObject();
-        } catch (IOException e) {
-            System.err.println("Could not read from configuration file.");
-            return false;
-        } catch (ClassNotFoundException e) {
-            System.err.println("Unknown content in configuration file.");
-            return false;
-        }
-
-        try {
-            fileManager.setUsedSpace(getDirectorySize(BASE_DIR + CHUNK_DIR));
-        } catch (IOException e) {
-            System.err.println("Could not get server actual size.");
-            return false;
-        }
-
-        if (getProtocolVersion() > 1)
-            leaseStoredFiles();
-
-        System.out.println("Server metadata loaded successfully.");
-        return true;
-    }
-
-    /**
      * Starts the leasing of every file stored.
      */
-    private void leaseStoredFiles() {
+    public void leaseStoredFiles() {
         storedChunks.forEachKey(10, leaseManager::startLease);
     }
-
-    /**
-     * Saves server metadata
-     */
-    private void saveServerMetadata() {
-        ObjectOutputStream objectOutputStream;
-        try {
-            objectOutputStream = new ObjectOutputStream(new FileOutputStream(getFile("." + getServerId())));
-        } catch (IOException e) {
-            System.err.println("Could not open configuration file for writing.");
-            return;
-        }
-
-        try {
-            objectOutputStream.writeLong(fileManager.getMaxStorageSize());
-            objectOutputStream.writeObject(storedChunks);
-            objectOutputStream.writeObject(desiredReplicationDegrees);
-            objectOutputStream.writeObject(chunkCurrentReplicationDegree);
-            objectOutputStream.writeObject(backedUpFiles);
-            System.out.println("Server metadata successfully saved.");
-        } catch (IOException e) {
-            System.err.println("Could not write to configuration file.");
-        }
-    }
-
 
     /**
      * Retrieves local service state information
@@ -825,7 +747,7 @@ public class Controller {
 
                 sb.append("\n\t\t\tSize: ");
                 try {
-                    sb.append(Files.size(getChunkPath(fileChunk.getKey(), chunkNo)) / 1000f);
+                    sb.append(Files.size(fileManager.getChunkPath(fileChunk.getKey(), chunkNo)) / 1000f);
                     sb.append(" KB");
                 } catch (IOException e) {
                     sb.append("Could not open chunk.");
@@ -886,5 +808,44 @@ public class Controller {
 
         if (getProtocolVersion() > 1)
             leaseManager.leaseEnd(fileId);
+    }
+
+    public ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> getChunkCurrentReplicationDegree() {
+        return chunkCurrentReplicationDegree;
+    }
+
+    public ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> getStoredChunks() {
+        return storedChunks;
+    }
+
+    public ConcurrentHashMap<String, Integer> getDesiredReplicationDegrees() {
+        return desiredReplicationDegrees;
+    }
+
+    public ConcurrentHashMap<String, String> getBackedUpFiles() {
+        return backedUpFiles;
+    }
+
+    public void setStoredChunks(ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> storedChunks) {
+        this.storedChunks = storedChunks;
+    }
+
+    public void setDesiredReplicationDegrees(ConcurrentHashMap<String, Integer> desiredReplicationDegrees) {
+        this.desiredReplicationDegrees = desiredReplicationDegrees;
+    }
+
+    public void setChunkCurrentReplicationDegree(ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> chunkCurrentReplicationDegree) {
+        this.chunkCurrentReplicationDegree = chunkCurrentReplicationDegree;
+    }
+
+    public void setBackedUpFiles(ConcurrentHashMap<String, String> backedUpFiles) {
+        this.backedUpFiles = backedUpFiles;
+    }
+
+    public void newMetadata() {
+        storedChunks = new ConcurrentHashMap<>();
+        desiredReplicationDegrees = new ConcurrentHashMap<>();
+        chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
+        backedUpFiles = new ConcurrentHashMap<>();
     }
 }

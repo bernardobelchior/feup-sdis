@@ -1,16 +1,9 @@
 package server;
 
-import java.io.File;
-import java.io.IOException;
 import java.io.UnsupportedEncodingException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
-
-import static server.Server.BASE_DIR;
-import static server.Server.CHUNK_DIR;
 
 /**
  * Utilities class.
@@ -50,27 +43,6 @@ public class Utils {
      */
     public static int randomBetween(int min, int max) {
         return new Random().nextInt(max - min) + min;
-    }
-
-    /**
-     * Gets Path to file and creates it.
-     *
-     * @param fileId  File Id
-     * @param chunkNo Chunk number
-     * @return Path to file.
-     */
-    public static Path getChunkPath(String fileId, int chunkNo) {
-        return getFile(CHUNK_DIR + fileId + chunkNo).toPath();
-    }
-
-    /**
-     * Gets file with filepath and its parent directories and takes in account the BASE_DIR.
-     *
-     * @param filepath Path to file.
-     * @return File
-     */
-    public static File getFile(String filepath) {
-        return new File(BASE_DIR + filepath);
     }
 
     /**

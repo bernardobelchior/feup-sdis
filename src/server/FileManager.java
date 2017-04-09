@@ -1,19 +1,29 @@
 package server;
 
-import java.io.ByteArrayInputStream;
-import java.io.File;
-import java.io.IOException;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 
-import static server.Utils.getChunkPath;
+import static server.Server.getProtocolVersion;
+import static server.Server.getServerId;
 
 public class FileManager {
+    /**
+     * Directory in which chunks will be stored.
+     */
+    private static final String CHUNK_DIR = "Chunks";
+    /**
+     * Directory in which restored files will be saved.
+     */
+    private static final String RESTORED_DIR = "RestoredFiles";
+
     private final String baseDir;
     private final String chunkDir;
     private final String restoredDir;
+    private final String metadataFileName;
     private Controller controller;
 
     /**
@@ -26,11 +36,15 @@ public class FileManager {
      */
     private volatile long usedSpace;
 
-    FileManager(long maxStorageSize, String baseDir, String chunkDir, String restoredDir) {
+    FileManager(long maxStorageSize, String baseDir) {
         this.maxStorageSize = maxStorageSize;
-        this.baseDir = baseDir;
-        this.chunkDir = chunkDir;
-        this.restoredDir = restoredDir;
+        this.baseDir = baseDir + "/";
+        this.chunkDir = this.baseDir + CHUNK_DIR;
+        this.restoredDir = this.baseDir + RESTORED_DIR;
+        metadataFileName = "." + getServerId();
+        usedSpace = 0;
+
+        initializeDirs();
     }
 
     /**
@@ -58,6 +72,26 @@ public class FileManager {
         return size;
     }
 
+    /**
+     * Gets Path to file and creates it.
+     *
+     * @param fileId  File Id
+     * @param chunkNo Chunk number
+     * @return Path to file.
+     */
+    public Path getChunkPath(String fileId, int chunkNo) {
+        return getFile(chunkDir + fileId + chunkNo).toPath();
+    }
+
+    /**
+     * Gets file with filepath and its parent directories and takes in account the BASE_DIR.
+     *
+     * @param filepath Path to file.
+     * @return File
+     */
+    public File getFile(String filepath) {
+        return new File(baseDir + filepath);
+    }
 
     /**
      * Deletes a chunk
@@ -108,13 +142,11 @@ public class FileManager {
             return false;
 
         usedSpace += size;
-        System.out.println("Increased. New used space: " + usedSpace);
         return true;
     }
 
     public synchronized boolean decreaseUsedSpace(long size) {
         usedSpace -= size;
-        System.out.println("Decreased. New used space: " + usedSpace);
         return true;
     }
 
@@ -122,15 +154,15 @@ public class FileManager {
         this.controller = controller;
     }
 
-    public void setMaxStorageSize(long maxStorageSize) {
+    public synchronized void setMaxStorageSize(long maxStorageSize) {
         this.maxStorageSize = maxStorageSize;
     }
 
-    public long getUsedSpace() {
+    public synchronized long getUsedSpace() {
         return usedSpace;
     }
 
-    public long getMaxStorageSize() {
+    public synchronized long getMaxStorageSize() {
         return maxStorageSize;
     }
 
@@ -139,7 +171,7 @@ public class FileManager {
      *
      * @param usedSpace In bytes.
      */
-    public void setUsedSpace(long usedSpace) {
+    public synchronized void setUsedSpace(long usedSpace) {
         this.usedSpace = usedSpace;
     }
 
@@ -181,5 +213,91 @@ public class FileManager {
         Files.copy(byteArrayInputStream, chunkPath, StandardCopyOption.REPLACE_EXISTING);
         increaseUsedSpace(chunkSize);
         return true;
+    }
+
+    public File getRestoredFilePath(String filename) {
+        return getFile(restoredDir + filename);
+    }
+
+    /**
+     * Saves server metadata
+     */
+    void saveServerMetadata() {
+        ObjectOutputStream objectOutputStream;
+        try {
+            objectOutputStream = new ObjectOutputStream(new FileOutputStream(getFile(metadataFileName)));
+        } catch (IOException e) {
+            System.err.println("Could not open configuration file for writing.");
+            return;
+        }
+
+        try {
+            objectOutputStream.writeLong(getMaxStorageSize());
+            objectOutputStream.writeObject(controller.getStoredChunks());
+            objectOutputStream.writeObject(controller.getDesiredReplicationDegrees());
+            objectOutputStream.writeObject(controller.getChunkCurrentReplicationDegree());
+            objectOutputStream.writeObject(controller.getBackedUpFiles());
+            System.out.println("Server metadata successfully saved.");
+        } catch (IOException e) {
+            System.err.println("Could not write to configuration file.");
+        }
+    }
+
+    /**
+     * Loads server metadata.
+     *
+     * @return True if the metadata was correctly loaded.
+     */
+    @SuppressWarnings("unchecked")
+    boolean loadServerMetadata() {
+        ObjectInputStream objectInputStream;
+
+        try {
+            objectInputStream = new ObjectInputStream(new FileInputStream(getFile(metadataFileName)));
+        } catch (IOException e) {
+            System.err.println("Could not open configuration file for reading.");
+            return false;
+        }
+
+        long maxStorageSize;
+        try {
+            maxStorageSize = objectInputStream.readLong();
+            controller.setStoredChunks((ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject());
+            controller.setDesiredReplicationDegrees((ConcurrentHashMap<String, Integer>) objectInputStream.readObject());
+            controller.setChunkCurrentReplicationDegree((ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject());
+            controller.setBackedUpFiles((ConcurrentHashMap<String, String>) objectInputStream.readObject());
+        } catch (IOException e) {
+            System.err.println("Could not read from configuration file.");
+            return false;
+        } catch (ClassNotFoundException e) {
+            System.err.println("Unknown content in configuration file.");
+            return false;
+        }
+
+        long usedSpace;
+        try {
+            usedSpace = getDirectorySize(chunkDir);
+        } catch (IOException e) {
+            System.err.println("Could not get server actual size.");
+            return false;
+        }
+
+        if (getProtocolVersion() > 1)
+            controller.leaseStoredFiles();
+
+        setMaxStorageSize(maxStorageSize);
+        setUsedSpace(usedSpace);
+        System.out.println("Server metadata loaded successfully.");
+        return true;
+    }
+
+    public byte[] loadChunk(String fileId, int chunkNo) throws IOException {
+        return Files.readAllBytes(getChunkPath(fileId, chunkNo));
+    }
+
+    void initializeDirs() {
+        new File(baseDir).mkdir();
+        new File(chunkDir).mkdir();
+        new File(restoredDir).mkdir();
     }
 }
