@@ -73,22 +73,6 @@ public class Utils {
         return new File(BASE_DIR + filepath);
     }
 
-    public static long getDirectorySize(String path) throws IOException {
-        long size = 0;
-
-        File directory = new File(path);
-        if (!directory.exists())
-            return 0;
-
-        File[] files = directory.listFiles();
-        for (File file : files) {
-            if (file.isFile())
-                size += Files.size(file.toPath());
-        }
-
-        return size;
-    }
-
     /**
      * Gets a chunkId from fileId and ChunkNo.
      *

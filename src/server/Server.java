@@ -62,8 +62,9 @@ public class Server {
         Channel controlChannel = new Channel(args[3], args[4]);
         Channel backupChannel = new Channel(args[5], args[6]);
         Channel recoveryChannel = new Channel(args[7], args[8]);
+        FileManager fileManager = new FileManager((long) (Math.pow(1000, 2) * 8), serverId + "/", CHUNK_DIR, RESTORED_DIR); /* 8 Megabytes */
 
-        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel);
+        Controller controller = new Controller(controlChannel, backupChannel, recoveryChannel, fileManager);
 
         InitiatorPeer initiatorPeer = null;
 

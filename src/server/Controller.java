@@ -10,12 +10,11 @@ import java.io.*;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.*;
 
+import static server.FileManager.getDirectorySize;
 import static server.Server.*;
 import static server.Utils.*;
 import static server.messaging.MessageBuilder.createMessage;
@@ -67,21 +66,6 @@ public class Controller {
     private ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> storedChunks;
 
     /**
-     * Max storage size allowed, in bytes
-     */
-    private int maxStorageSize;
-
-    /**
-     * Storage size used to store chunks. Value is updated on backup and delete protocol
-     */
-    private volatile long usedSpace;
-
-    /**
-     * Lock to synchronize usedSpace.
-     */
-    private final Object usedSpaceLock = new Object();
-
-    /**
      * Maps FileId to Filename
      */
     private ConcurrentHashMap<String, String> backedUpFiles;
@@ -92,14 +76,21 @@ public class Controller {
     private final LeaseManager leaseManager;
 
     /**
+     * File manager.
+     */
+    FileManager fileManager;
+
+    /**
      * Socket used for restore enhancement.
      */
     private Socket recoverySocket;
 
-    public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel) {
+    public Controller(Channel controlChannel, Channel backupChannel, Channel recoveryChannel, FileManager fileManager) {
         this.controlChannel = controlChannel;
         this.backupChannel = backupChannel;
         this.recoveryChannel = recoveryChannel;
+        this.fileManager = fileManager;
+        fileManager.setController(this);
         leaseManager = new LeaseManager(this, controlChannel);
 
         initializeDirs();
@@ -109,8 +100,6 @@ public class Controller {
             desiredReplicationDegrees = new ConcurrentHashMap<>();
             chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
             backedUpFiles = new ConcurrentHashMap<>();
-            maxStorageSize = (int) (Math.pow(1000, 2) * 8); // 8 Megabytes
-            usedSpace = 0;
         }
 
         this.controlChannel.setController(this);
@@ -202,7 +191,7 @@ public class Controller {
                         if (headerFields.length != 5)
                             throw new InvalidHeaderException("A chunk stored header must have exactly 5 fields. Received " + headerFields.length + ".");
 
-                        processStoredMessage(headerFields[3], chunkNo);
+                        processStoredMessage(senderId, headerFields[3], chunkNo);
                         break;
                     case Recover.RESTORE_INIT:
                         if (headerFields.length != 5)
@@ -288,19 +277,15 @@ public class Controller {
         if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
             return;
 
-        int chunkSize = byteArrayInputStream.available();
-        if (!hasSpaceAvailable(chunkSize)) {
-            System.out.println("Not enough space to backup chunk " + chunkNo + " from fileId " + fileId + ".");
-            return;
-        }
-
         try {
             /* Update used space after backing up chunk */
-            storeChunk(fileId, chunkNo, byteArrayInputStream);
-            synchronized (usedSpaceLock) {
-                usedSpace += chunkSize;
+            if (fileManager.storeChunk(fileId, chunkNo, byteArrayInputStream)) {
+                System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
+                incrementReplicationDegree(fileId, chunkNo);
+            } else {
+                System.out.println("Not enough space to backup chunk " + chunkNo + " from fileId " + fileId + ".");
+                return;
             }
-            System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
         } catch (IOException e) {
             System.err.println("Could not create file to store chunk. Discarding...");
             return;
@@ -329,29 +314,14 @@ public class Controller {
     }
 
     /**
-     * Stores a chunk
-     *
-     * @param fileId               File Id
-     * @param chunkNo              Chunk number
-     * @param byteArrayInputStream byteArrayInputStream containing chunk body
-     * @throws IOException In case the file could not be deleted.
-     */
-    private void storeChunk(String fileId, int chunkNo, ByteArrayInputStream byteArrayInputStream) throws IOException {
-        Path chunkPath = getChunkPath(fileId, chunkNo);
-        if (chunkPath.toFile().exists())
-            chunkPath.toFile().delete();
-
-        Files.copy(byteArrayInputStream, chunkPath, StandardCopyOption.REPLACE_EXISTING);
-    }
-
-    /**
      * Processes a stored message
      *
      * @param fileId  File Id
      * @param chunkNo Chunk number
      */
-    private void processStoredMessage(String fileId, int chunkNo) {
-        incrementReplicationDegree(fileId, chunkNo);
+    private void processStoredMessage(int senderId, String fileId, int chunkNo) {
+        if (senderId != getServerId())
+            incrementReplicationDegree(fileId, chunkNo);
     }
 
     /**
@@ -505,7 +475,7 @@ public class Controller {
     private void processDeleteMessage(int serverId, String fileId) {
         System.out.println("Received " + DELETE_INIT + " from " + serverId + " for file " + fileId);
 
-        if (deleteFile(fileId)) {
+        if (fileManager.deleteFile(fileId)) {
             System.out.println("Successfully deleted file " + fileId);
         } else
             System.out.println("Could not delete file " + fileId);
@@ -611,43 +581,14 @@ public class Controller {
      * @param fileId  File Id
      * @param chunkNo Chunk number
      */
-    private void decrementReplicationDegree(String fileId, int chunkNo) {
+    public void decrementReplicationDegree(String fileId, int chunkNo) {
+        int replicationDegree = getCurrentReplicationDegree(fileId, chunkNo) - 1;
+
         ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
-        chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) - 1);
-    }
-
-    /**
-     * Deletes a chunk
-     *
-     * @param fileId  File Id
-     * @param chunkNo Chunk number
-     */
-    private void deleteChunk(String fileId, Integer chunkNo) {
-        System.out.println("Deleting chunkNo " + chunkNo + " from file" + fileId);
-
-         /* Deletes chunk and then updates the used space. */
-        try {
-            long fileSize = Files.size(getChunkPath(fileId, chunkNo));
-            Files.deleteIfExists(getChunkPath(fileId, chunkNo));
-            synchronized (usedSpaceLock) {
-                usedSpace -= fileSize;
-            }
-        } catch (IOException e) {
-            System.out.println("Unsuccessful deletion of chunkNo " + chunkNo + " from fileId " + fileId + ".");
-            return;
-        }
-
-         /* Decrement Replication Degree */
-        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
-        int chunkRepDegree = chunks.getOrDefault(chunkNo, 0);
-
-        if (chunkRepDegree < 2)
+        if (replicationDegree < 1)
             chunks.remove(chunkNo);
         else
-            chunks.put(chunkNo, chunkRepDegree - 1);
-
-        storedChunks.get(fileId).remove(chunkNo);
-        System.out.println("Successful deletion of chunkNo " + chunkNo + " from fileId " + fileId + ".");
+            chunks.put(chunkNo, replicationDegree);
     }
 
     /**
@@ -721,10 +662,9 @@ public class Controller {
      * @return Returns true if the desired storage size can be set.
      */
     public void startReclaim(int storageSize) {
-        if (storageSize > maxStorageSize) {
-            maxStorageSize = storageSize;
-        } else {
-            maxStorageSize = storageSize;
+        fileManager.setMaxStorageSize(storageSize);
+
+        if (!fileManager.hasSpaceAvailable()) {
             reclaimSpace();
             saveServerMetadata();
         }
@@ -750,10 +690,10 @@ public class Controller {
             return;
 
         /* Chunk with Replication Degree greater than Desired Replication Degree */
-        while (usedSpace > maxStorageSize) {
+        while (!fileManager.hasSpaceAvailable()) {
             ChunkReplication leastNecessaryChunk = leastNecessaryChunks.poll();
 
-            deleteChunk(leastNecessaryChunk.getFileId(), leastNecessaryChunk.getChunkNo());
+            fileManager.deleteChunk(leastNecessaryChunk.getFileId(), leastNecessaryChunk.getChunkNo(), this);
             System.out.println("Successfully deleted chunk number " + leastNecessaryChunk.getChunkNo() + " belonging to fileId " + leastNecessaryChunk.getFileId() + ".");
 
             controlChannel.sendMessage(
@@ -782,7 +722,7 @@ public class Controller {
         }
 
         try {
-            maxStorageSize = objectInputStream.readInt();
+            fileManager.setMaxStorageSize(objectInputStream.readLong());
             storedChunks = (ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject();
             desiredReplicationDegrees = (ConcurrentHashMap<String, Integer>) objectInputStream.readObject();
             chunkCurrentReplicationDegree = (ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject();
@@ -796,7 +736,7 @@ public class Controller {
         }
 
         try {
-            usedSpace = getDirectorySize(BASE_DIR + CHUNK_DIR);
+            fileManager.setUsedSpace(getDirectorySize(BASE_DIR + CHUNK_DIR));
         } catch (IOException e) {
             System.err.println("Could not get server actual size.");
             return false;
@@ -829,7 +769,7 @@ public class Controller {
         }
 
         try {
-            objectOutputStream.writeInt(maxStorageSize);
+            objectOutputStream.writeLong(fileManager.getMaxStorageSize());
             objectOutputStream.writeObject(storedChunks);
             objectOutputStream.writeObject(desiredReplicationDegrees);
             objectOutputStream.writeObject(chunkCurrentReplicationDegree);
@@ -898,24 +838,14 @@ public class Controller {
         });
 
         sb.append("\n\n\nMaximum Storage Size: ");
-        sb.append(maxStorageSize / 1000.0f);
+        sb.append(fileManager.getMaxStorageSize() / 1000.0f);
         sb.append(" KB");
 
         sb.append("\nCurrent Space Used: ");
-        sb.append(usedSpace / 1000.0f);
+        sb.append(fileManager.getUsedSpace() / 1000.0f);
         sb.append(" KB");
 
         return sb.toString();
-    }
-
-    /**
-     * Checks if peer has available space to store a new chunk
-     *
-     * @param chunkSize chunk size
-     * @return Returns true if peers has available space to store chunk
-     */
-    private boolean hasSpaceAvailable(int chunkSize) {
-        return usedSpace + (long) chunkSize < maxStorageSize;
     }
 
     /**
@@ -927,34 +857,34 @@ public class Controller {
         return recoveryChannel.getPort();
     }
 
-    /**
-     * Deletes every chunk of the given file.
-     *
-     * @param fileId File id.
-     */
-    public boolean deleteFile(String fileId) {
-        ConcurrentSkipListSet<Integer> chunksToDelete = storedChunks.get(fileId);
+    public int getCurrentReplicationDegree(String fileId, int chunkNo) {
+        ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = chunkCurrentReplicationDegree.get(fileId);
 
-        if (chunksToDelete == null) {
-            backedUpFiles.remove(fileId);
-            desiredReplicationDegrees.remove(fileId);
-            chunkCurrentReplicationDegree.remove(fileId);
-            backedUpFiles.remove(fileId);
-            return true;
-        }
+        if (chunksReplicationDegree == null)
+            return 0;
 
-        chunksToDelete.forEach(chunkNo -> deleteChunk(fileId, chunkNo));
+        return chunksReplicationDegree.getOrDefault(chunkNo, 0);
+    }
 
-        if (chunksToDelete.isEmpty()) {
-            backedUpFiles.remove(fileId);
-            desiredReplicationDegrees.remove(fileId);
-            chunkCurrentReplicationDegree.remove(fileId);
-            backedUpFiles.remove(fileId);
+    public void localChunkDeleted(String fileId, int chunkNo) {
+        ConcurrentSkipListSet<Integer> chunks = storedChunks.get(fileId);
 
-            if (getProtocolVersion() > 1)
-                leaseManager.leaseEnd(fileId);
-            return true;
-        } else
-            return false;
+        decrementReplicationDegree(fileId, chunkNo);
+
+        if (chunks != null)
+            chunks.remove(chunkNo);
+    }
+
+    public ConcurrentSkipListSet<Integer> getStoredChunksOfFile(String fileId) {
+        return storedChunks.getOrDefault(fileId, new ConcurrentSkipListSet<>());
+    }
+
+    public void fileDeleted(String fileId) {
+        backedUpFiles.remove(fileId);
+        desiredReplicationDegrees.remove(fileId);
+        chunkCurrentReplicationDegree.remove(fileId);
+
+        if (getProtocolVersion() > 1)
+            leaseManager.leaseEnd(fileId);
     }
 }
