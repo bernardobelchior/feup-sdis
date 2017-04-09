@@ -39,8 +39,8 @@ public class FileManager {
     FileManager(long maxStorageSize, String baseDir) {
         this.maxStorageSize = maxStorageSize;
         this.baseDir = baseDir + "/";
-        this.chunkDir = this.baseDir + CHUNK_DIR;
-        this.restoredDir = this.baseDir + RESTORED_DIR;
+        this.chunkDir = CHUNK_DIR + "/";
+        this.restoredDir = RESTORED_DIR + "/";
         metadataFileName = "." + getServerId();
         usedSpace = 0;
 
@@ -299,7 +299,7 @@ public class FileManager {
 
     void initializeDirs() {
         new File(baseDir).mkdir();
-        new File(chunkDir).mkdir();
-        new File(restoredDir).mkdir();
+        getFile(chunkDir).mkdir();
+        getFile(restoredDir).mkdir();
     }
 }

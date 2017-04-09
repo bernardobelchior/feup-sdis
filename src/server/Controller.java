@@ -932,6 +932,7 @@ public class Controller {
         desiredReplicationDegrees = new ConcurrentHashMap<>();
         chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
         backedUpFiles = new ConcurrentHashMap<>();
+        incompleteTasks = new ConcurrentHashMap<>();
     }
 
     public void setIncompleteTasks(ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> incompleteTasks) {
