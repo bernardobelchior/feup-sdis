@@ -114,7 +114,6 @@ public class Backup {
 
             /* Add chunk to Incompleted Tasks HashMap */
             if(getProtocolVersion() > 1.0){
-                System.out.println("Adicionada as Incompleted Task");
                 controller.getIncompletedTasks().putIfAbsent(getFileId(), new ConcurrentSkipListSet<>());
                 controller.getIncompletedTasks().get(getFileId()).add(chunkNo);
             }

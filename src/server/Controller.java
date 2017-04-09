@@ -137,12 +137,8 @@ public class Controller {
 
     private void completeTasks(){
 
-        if(incompletedTasks.isEmpty()){
-            System.out.println("ALL TASK COMPLETED");
+        if(incompletedTasks.isEmpty())
             return;
-        }
-
-        System.out.println("HAS INCOMPLETE TASK");
 
         incompletedTasks.forEachEntry(10, file -> {
             String fileId = file.getKey();
@@ -150,14 +146,9 @@ public class Controller {
                 try {
                     if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunk)) {
 
-                        System.out.println("Deleted All Chunks !!!!!!!!!! ");
-
-
+                        System.out.println("Deleting chunks...");
                         String filename = backedUpFiles.get(fileId);
                         int replicationDegree = desiredReplicationDegrees.get(fileId);
-
-                        System.out.println("Filename: " + filename);
-                        System.out.println("Replication Degree" + replicationDegree);
 
                         sendToControlChannel(createMessage(
                                 DELETE_INIT,
@@ -189,7 +180,7 @@ public class Controller {
 
 
                 } catch (IOException e) {
-                    System.out.println("Error getting chunk path");
+                    System.out.println("Error getting chunk path...");
                 }
             }
         });
