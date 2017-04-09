@@ -109,15 +109,15 @@ public class Backup {
         return threadPool.submit(() -> {
             byte[] effectiveChunk = chunk;
 
-            if (size != CHUNK_SIZE)
-                effectiveChunk = Arrays.copyOf(chunk, size);
-
-            /* Add chunk to Incompleted Tasks HashMap */
+               /* Add chunk to Incompleted Tasks HashMap */
             if(getProtocolVersion() > 1.0){
+                System.out.println("GUARDAR NAS TASKS..." + chunkNo + " do file " + fileId);
                 controller.getIncompletedTasks().putIfAbsent(getFileId(), new ConcurrentSkipListSet<>());
                 controller.getIncompletedTasks().get(getFileId()).add(chunkNo);
             }
 
+            if (size != CHUNK_SIZE)
+                effectiveChunk = Arrays.copyOf(chunk, size);
 
             byte[] message = MessageBuilder.createMessage(
                     effectiveChunk,

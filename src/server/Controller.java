@@ -1,6 +1,5 @@
 package server;
 
-
 import server.messaging.Channel;
 import server.messaging.MessageParser;
 import server.protocol.Backup;
@@ -14,7 +13,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Map;
 import java.util.PriorityQueue;
-import java.util.Set;
 import java.util.concurrent.*;
 
 import static server.Server.*;
@@ -145,6 +143,9 @@ public class Controller {
             String fileId = file.getKey();
             for (Integer chunk : file.getValue()) {
                 try {
+
+                    System.out.println("Chunk no " + chunk + "do file " + fileId);
+
                     if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunk)) {
 
                         System.out.println("Deleting chunks...");
@@ -169,16 +170,19 @@ public class Controller {
                         return;
                     }
 
+
+                    System.out.println("Starting to send PUTCHUNK AGAIN ");
+
                     byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunk));
 
-                    sendToBackupChannel(createMessage(chunkBody,
+                    sendToBackupChannel(createMessage(
+                            chunkBody,
                             BACKUP_INIT,
                             Double.toString(getProtocolVersion()),
                             Integer.toString(getServerId()),
                             fileId,
-                            Integer.toString(chunk)));
-
-
+                            Integer.toString(chunk),
+                            Integer.toString(desiredReplicationDegrees.get(fileId))));
 
                 } catch (IOException e) {
                     System.out.println("Error getting chunk path...");
@@ -615,6 +619,16 @@ public class Controller {
         byte[] chunkBody = Files.readAllBytes(getChunkPath(fileId, chunkNo));
 
         System.out.println("Ready to start backup...");
+
+             /* Add chunk to Incompleted Tasks HashMap */
+        if(getProtocolVersion() > 1.0){
+
+            System.out.println("TENHO O CHUNK.... VOU tratar DOS PUT CHUNKS");
+
+            System.out.println("GUARDAR NAS TASKS..." + chunkNo + " do file " + fileId);
+            incompletedTasks.putIfAbsent(fileId, new ConcurrentSkipListSet<>());
+            incompletedTasks.get(fileId).add(chunkNo);
+        }
 
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
