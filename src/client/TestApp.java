@@ -19,7 +19,7 @@ class TestApp {
         IInitiatorPeer initiatorPeer;
 
         try {
-            Registry registry = LocateRegistry.getRegistry("localhost"); //TODO: This is part of peerAcessPoint
+            Registry registry = LocateRegistry.getRegistry("localhost");
             initiatorPeer = (IInitiatorPeer) registry.lookup(peerAccessPoint);
         } catch (NotBoundException | RemoteException e) {
             System.out.println("Could not find connect to peer with access point: " + peerAccessPoint);
@@ -35,8 +35,7 @@ class TestApp {
                         System.out.println("File backup successful.");
                     else
                         System.out.println("File backup failed.");
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+                } catch (RemoteException ignored) {
                 }
                 break;
             case "RESTORE":
@@ -46,8 +45,7 @@ class TestApp {
                         System.out.println("File successfully restored.");
                     else
                         System.out.println("File recovery failed.");
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+                } catch (RemoteException ignored) {
                 }
                 break;
             case "DELETE":
@@ -57,23 +55,20 @@ class TestApp {
                         System.out.println("File deletion successful.");
                     else
                         System.out.println("File deletion failed.");
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+                } catch (RemoteException ignored) {
                 }
                 break;
             case "RECLAIM":
                 int maximumDiskSpace = Integer.parseInt(args[2]);
                 try {
                     initiatorPeer.reclaim(maximumDiskSpace);
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+                } catch (RemoteException ignored) {
                 }
                 break;
             case "STATE":
                 try {
                     System.out.println(initiatorPeer.state());
-                } catch (RemoteException e) {
-                    e.printStackTrace();
+                } catch (RemoteException ignored) {
                 }
                 break;
             default:
