@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.*;
@@ -127,7 +128,25 @@ public class Controller {
             String fileId = file.getKey();
             String filename = backedUpFiles.get(fileId);
             int replicationDegree = desiredReplicationDegrees.get(fileId);
-            startFileBackup(new PartialBackup(filename, replicationDegree, file.getValue()));
+
+            if (filename != null) {
+                startFileBackup(new PartialBackup(filename, replicationDegree, file.getValue()));
+            } else {
+                ExecutorService threadPool = Executors.newFixedThreadPool(10);
+                ArrayList<Future<Boolean>> backedUpChunks = new ArrayList<>();
+                for (Integer chunkNo : file.getValue()) {
+                    byte[] chunkBody;
+                    try {
+                        chunkBody = fileManager.loadChunk(fileId, chunkNo);
+                    } catch (IOException e) {
+                        return;
+                    }
+
+                    backedUpChunks.add(threadPool.submit(() -> Backup.backupChunk(this, fileId, chunkNo, chunkBody, chunkBody.length)));
+                }
+
+                Backup.waitForChunks(backedUpChunks);
+            }
         });
     }
 
@@ -533,18 +552,18 @@ public class Controller {
         if (getCurrentReplicationDegree(fileId, chunkNo) >= desiredReplicationDegrees.get(fileId))
             return;
 
+        /* Add chunk to Incomplete Tasks HashMap */
+        if (getProtocolVersion() > 1.0) {
+            addChunkToIncompleteTask(fileId, chunkNo);
+            saveIncompleteTasks();
+        }
+
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
         chunksToBackUp.put(getChunkId(fileId, chunkNo), executorService);
 
         byte[] chunkBody = fileManager.loadChunk(fileId, chunkNo);
 
         System.out.println("Ready to start backup...");
-
-        /* Add chunk to Incomplete Tasks HashMap */
-        if (getProtocolVersion() > 1.0) {
-            addChunkToIncompleteTask(fileId, chunkNo);
-            saveIncompleteTasks();
-        }
 
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
@@ -911,4 +930,7 @@ public class Controller {
         this.peersStoringChunk = peersStoringChunk;
     }
 
+    public int getDesiredReplicationDegree(String fileId) {
+        return desiredReplicationDegrees.getOrDefault(fileId, 0);
+    }
 }

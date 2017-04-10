@@ -1,10 +1,8 @@
 package server.protocol;
 
 import server.Controller;
-import server.Utils;
 import server.messaging.MessageBuilder;
 
-import javax.xml.bind.DatatypeConverter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -13,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.*;
 
+import static server.FileManager.generateFileId;
 import static server.Server.*;
 
 public class Backup {
@@ -24,22 +23,21 @@ public class Backup {
     private static final int MAX_BACKUP_ATTEMPTS = 5;
     public static final int BACKUP_REPLY_MIN_DELAY = 0;
     public static final int BACKUP_REPLY_MAX_DELAY = 400;
-    private final String filename;
-
 
     private final int desiredReplicationDegree;
-    final String fileId;
-    final File file;
+    String fileId;
+    File file;
     private final int MAX_BACKUP_THREADS = 10;
     final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_BACKUP_THREADS);
 
     Controller controller;
+    private String filename;
 
     public Backup(String filename, int desiredReplicationDegree) {
-        this.filename = filename;
         this.desiredReplicationDegree = desiredReplicationDegree;
+        this.filename = filename;
         file = new File(filename);
-        fileId = generateFileId();
+        fileId = generateFileId(filename, file);
     }
 
     /**
@@ -93,8 +91,11 @@ public class Backup {
             e.printStackTrace();
         }
 
-        if (!waitForChunks(backedUpChunks))
+        if (!waitForChunks(backedUpChunks)) {
+            controller.removeFileFromIncompleteTask(fileId);
+            controller.saveIncompleteTasks();
             return false;
+        }
 
         controller.removeFileFromIncompleteTask(fileId);
         controller.saveIncompleteTasks();
@@ -103,23 +104,73 @@ public class Backup {
         return true;
     }
 
-    boolean waitForChunks(ArrayList<Future<Boolean>> backedUpChunks) {
+    /**
+     * Waits for chunks.
+     *
+     * @param backedUpChunks Backed up chunks.
+     * @return
+     */
+    public static boolean waitForChunks(ArrayList<Future<Boolean>> backedUpChunks) {
         for (Future<Boolean> result : backedUpChunks) {
             try {
                 if (!result.get(1, TimeUnit.MINUTES)) {
-                    System.out.println("Could not backup a chunk. File backup failed.");
-                    controller.removeFileFromIncompleteTask(fileId);
-                    controller.saveIncompleteTasks();
+                    System.out.println("Could not backup a chunk. Backup failed.");
                     return false;
                 }
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
-                System.out.println("File backup took too long. Assuming it failed.");
-                controller.removeFileFromIncompleteTask(fileId);
-                controller.saveIncompleteTasks();
+                System.out.println("Backup took too long. Assuming it failed.");
                 return false;
             }
         }
 
+        return true;
+    }
+
+    /**
+     * Backs up a specific chunk.
+     *
+     * @param controller Controller
+     * @param fileId     File Id
+     * @param chunkNo    Chunk number to be backed up.
+     * @param chunk      Chunk content.
+     * @param size       Chunk size.
+     */
+    public static boolean backupChunk(Controller controller, String fileId, int chunkNo, byte[] chunk, int size) {
+        byte[] effectiveChunk = chunk;
+
+        if (size != CHUNK_SIZE)
+            effectiveChunk = Arrays.copyOf(chunk, size);
+
+        int desiredReplicationDegree = controller.getDesiredReplicationDegree(fileId);
+
+        byte[] message = MessageBuilder.createMessage(
+                effectiveChunk,
+                BACKUP_INIT,
+                Double.toString(getProtocolVersion()),
+                Integer.toString(getServerId()),
+                fileId,
+                Integer.toString(chunkNo),
+                Integer.toString(desiredReplicationDegree));
+
+        int attempts = 0;
+        do {
+            controller.sendToBackupChannel(message);
+
+            try {
+                Thread.sleep(BACKUP_TIMEOUT * 2 ^ attempts);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+            attempts++;
+        } while (controller.getCurrentReplicationDegree(fileId, chunkNo) < desiredReplicationDegree
+                && attempts < MAX_BACKUP_ATTEMPTS);
+
+        if (attempts >= MAX_BACKUP_ATTEMPTS) {
+            System.out.println("Max backup attempts reached. Stopping backup process...");
+            return false;
+        }
+
+        System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + controller.getCurrentReplicationDegree(fileId, chunkNo) + ".");
         return true;
     }
 
@@ -131,52 +182,7 @@ public class Backup {
      * @param size    Chunk size.
      */
     Future<Boolean> backupChunk(int chunkNo, byte[] chunk, int size) {
-        return threadPool.submit(() -> {
-            byte[] effectiveChunk = chunk;
-
-            if (size != CHUNK_SIZE)
-                effectiveChunk = Arrays.copyOf(chunk, size);
-
-            byte[] message = MessageBuilder.createMessage(
-                    effectiveChunk,
-                    BACKUP_INIT,
-                    Double.toString(getProtocolVersion()),
-                    Integer.toString(getServerId()),
-                    fileId,
-                    Integer.toString(chunkNo),
-                    Integer.toString(desiredReplicationDegree));
-
-            int attempts = 0;
-            do {
-                controller.sendToBackupChannel(message);
-
-                try {
-                    Thread.sleep(BACKUP_TIMEOUT * 2 ^ attempts);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-                attempts++;
-            } while (controller.getCurrentReplicationDegree(fileId, chunkNo) < desiredReplicationDegree
-                    && attempts < MAX_BACKUP_ATTEMPTS);
-
-            if (attempts >= MAX_BACKUP_ATTEMPTS) {
-                System.out.println("Max backup attempts reached. Stopping backup process...");
-                return false;
-            }
-
-            System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + controller.getCurrentReplicationDegree(fileId, chunkNo) + ".");
-            return true;
-        });
-    }
-
-    /**
-     * Generates File ID from its filename, last modified and permissions.
-     *
-     * @return File ID
-     */
-    private String generateFileId() {
-        String bitString = filename + Long.toString(file.lastModified()) + Boolean.toString(file.canRead()) + Boolean.toString(file.canWrite()) + Boolean.toString(file.canExecute());
-        return DatatypeConverter.printHexBinary(Utils.sha256(bitString));
+        return threadPool.submit(() -> backupChunk(controller, fileId, chunkNo, chunk, size));
     }
 
     /**
@@ -189,20 +195,15 @@ public class Backup {
     }
 
     /**
-     * Get file name.
-     *
-     * @return File name.
-     */
-    public String getFilename() {
-        return filename;
-    }
-
-    /**
      * Get desired replication degree.
      *
      * @return Desired replication degree.
      */
     public int getDesiredReplicationDegree() {
         return desiredReplicationDegree;
+    }
+
+    public String getFilename() {
+        return filename;
     }
 }

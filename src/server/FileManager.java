@@ -76,6 +76,16 @@ public class FileManager {
     }
 
     /**
+     * Generates File ID from its filename, last modified and permissions.
+     *
+     * @return File ID
+     */
+    public static String generateFileId(String filename, File file) {
+        String bitString = filename + Long.toString(file.lastModified()) + Boolean.toString(file.canRead()) + Boolean.toString(file.canWrite()) + Boolean.toString(file.canExecute());
+        return DatatypeConverter.printHexBinary(Utils.sha256(bitString));
+    }
+
+    /**
      * Gets Path to file and creates it.
      *
      * @param fileId  File Id
