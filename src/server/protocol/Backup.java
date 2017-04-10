@@ -28,12 +28,12 @@ public class Backup {
 
 
     private final int desiredReplicationDegree;
-    protected final String fileId;
-    protected final File file;
+    final String fileId;
+    final File file;
     private final int MAX_BACKUP_THREADS = 10;
-    protected final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_BACKUP_THREADS);
+    final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_BACKUP_THREADS);
 
-    protected Controller controller;
+    Controller controller;
 
     public Backup(String filename, int desiredReplicationDegree) {
         this.filename = filename;
@@ -103,7 +103,7 @@ public class Backup {
         return true;
     }
 
-    protected boolean waitForChunks(ArrayList<Future<Boolean>> backedUpChunks) {
+    boolean waitForChunks(ArrayList<Future<Boolean>> backedUpChunks) {
         for (Future<Boolean> result : backedUpChunks) {
             try {
                 if (!result.get(1, TimeUnit.MINUTES)) {
@@ -130,7 +130,7 @@ public class Backup {
      * @param chunk   Chunk content.
      * @param size    Chunk size.
      */
-    protected Future<Boolean> backupChunk(int chunkNo, byte[] chunk, int size) {
+    Future<Boolean> backupChunk(int chunkNo, byte[] chunk, int size) {
         return threadPool.submit(() -> {
             byte[] effectiveChunk = chunk;
 

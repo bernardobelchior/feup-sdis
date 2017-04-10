@@ -1,5 +1,6 @@
 package server;
 
+import javax.xml.bind.DatatypeConverter;
 import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -56,7 +57,7 @@ public class FileManager {
      * @return Returns directory size in bytes.
      * @throws IOException In case the directory could not be accessed.
      */
-    public static long getDirectorySize(String path) throws IOException {
+    private static long getDirectorySize(String path) throws IOException {
         long size = 0;
 
         File directory = new File(path);
@@ -91,7 +92,7 @@ public class FileManager {
      * @param filepath Path to file.
      * @return File
      */
-    public File getFile(String filepath) {
+    private File getFile(String filepath) {
         return new File(baseDir + filepath);
     }
 
@@ -100,7 +101,7 @@ public class FileManager {
      *
      * @param fileId     File Id
      * @param chunkNo    Chunk number
-     * @param controller
+     * @param controller Controller
      */
     void deleteChunk(String fileId, Integer chunkNo, Controller controller) {
         System.out.println("Deleting chunkNo " + chunkNo + " from file" + fileId);
@@ -125,7 +126,7 @@ public class FileManager {
      * @param size Size of file to check
      * @return Returns true if the sum of the current space in use and the size is less than or equal to {@param maxStorageSize}.
      */
-    synchronized boolean hasSpaceAvailable(long size) {
+    private synchronized boolean hasSpaceAvailable(long size) {
         return usedSpace + size <= maxStorageSize;
     }
 
@@ -138,7 +139,7 @@ public class FileManager {
         return hasSpaceAvailable(0);
     }
 
-    public synchronized boolean increaseUsedSpace(long size) {
+    private synchronized boolean increaseUsedSpace(long size) {
         if (!hasSpaceAvailable(size))
             return false;
 
@@ -146,7 +147,7 @@ public class FileManager {
         return true;
     }
 
-    public synchronized boolean decreaseUsedSpace(long size) {
+    private synchronized boolean decreaseUsedSpace(long size) {
         usedSpace -= size;
         return true;
     }
@@ -172,7 +173,7 @@ public class FileManager {
      *
      * @param usedSpace In bytes.
      */
-    public synchronized void setUsedSpace(long usedSpace) {
+    private synchronized void setUsedSpace(long usedSpace) {
         this.usedSpace = usedSpace;
     }
 
@@ -347,9 +348,23 @@ public class FileManager {
         return true;
     }
 
-    void initializeDirs() {
+    private void initializeDirs() {
         new File(baseDir).mkdir();
         getFile(chunkDir).mkdir();
         getFile(restoredDir).mkdir();
+    }
+
+    /**
+     * Generates File ID from its filename, last modified and permissions.
+     *
+     * @param filename Filename
+     * @return File ID
+     */
+    String generateFileId(String filename) {
+        File file = new File(filename);
+
+        String bitString = filename + Long.toString(file.lastModified()) + Boolean.toString(file.canRead()) + Boolean.toString(file.canWrite()) + Boolean.toString(file.canExecute());
+
+        return DatatypeConverter.printHexBinary(Utils.sha256(bitString));
     }
 }

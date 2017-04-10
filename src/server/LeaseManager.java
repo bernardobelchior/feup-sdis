@@ -112,7 +112,7 @@ class LeaseManager {
     /**
      * Renews the lease for fileId.
      *
-     * @param fileId
+     * @param fileId File id
      */
     public void leaseRenew(String fileId) {
         if (!fileLeaseValidity.getOrDefault(fileId, false)) {
@@ -124,7 +124,7 @@ class LeaseManager {
     /**
      * Ends the lease for fileId.
      *
-     * @param fileId
+     * @param fileId File Id.
      */
     public void leaseEnd(String fileId) {
         fileLeaseValidity.remove(fileId);

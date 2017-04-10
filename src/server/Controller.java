@@ -81,7 +81,7 @@ public class Controller {
     /**
      * File manager.
      */
-    FileManager fileManager;
+    final FileManager fileManager;
 
     /**
      * Socket used for restore enhancement.
@@ -871,7 +871,7 @@ public class Controller {
         this.backedUpFiles = backedUpFiles;
     }
 
-    public void newServerMetadata() {
+    private void newServerMetadata() {
         storedChunks = new ConcurrentHashMap<>();
         desiredReplicationDegrees = new ConcurrentHashMap<>();
         backedUpFiles = new ConcurrentHashMap<>();
@@ -892,7 +892,7 @@ public class Controller {
         incompleteTasks.remove(fileId);
     }
 
-    public synchronized void removeChunkFromIncompleteTask(String fileId, int chunkNo) {
+    private synchronized void removeChunkFromIncompleteTask(String fileId, int chunkNo) {
         ConcurrentSkipListSet<Integer> incompleteChunks = incompleteTasks.get(fileId);
 
         if (incompleteChunks != null)
@@ -910,4 +910,5 @@ public class Controller {
     public void setPeersStoringChunks(ConcurrentHashMap<String, ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>>> peersStoringChunk) {
         this.peersStoringChunk = peersStoringChunk;
     }
+
 }
