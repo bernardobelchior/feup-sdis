@@ -101,7 +101,7 @@ public class Controller {
         leaseManager = new LeaseManager(this, controlChannel);
 
         if (!fileManager.loadServerMetadata())
-            newMetadata();
+            newServerMetadata();
 
         this.controlChannel.setController(this);
         this.backupChannel.setController(this);
@@ -111,23 +111,29 @@ public class Controller {
         this.backupChannel.listen();
         this.recoveryChannel.listen();
 
-        if (getProtocolVersion() > 1.0)
-            completeTasks();
+        if (getProtocolVersion() > 1.0) {
+            if (fileManager.loadIncompleteTasks())
+                finishIncompleteTasks();
+            else
+                incompleteTasks = new ConcurrentHashMap<>();
+        }
 
         Executors.newSingleThreadScheduledExecutor().scheduleWithFixedDelay(fileManager::saveServerMetadata, 5, 5, TimeUnit.SECONDS);
     }
 
-    private void completeTasks() {
-        if (incompleteTasks.isEmpty())
-            return;
-
+    private void finishIncompleteTasks() {
+        System.out.println(incompleteTasks.size());
         incompleteTasks.forEachEntry(10, file -> {
             String fileId = file.getKey();
+            removeFileFromIncompleteTask(fileId);
+            System.out.println(fileId);
             for (Integer chunkNo : file.getValue()) {
 
                 if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunkNo)) {
                     System.out.println("Deleting chunks...");
                     String filename = backedUpFiles.get(fileId);
+
+                    System.out.println(desiredReplicationDegrees.get(fileId));
                     int replicationDegree = desiredReplicationDegrees.get(fileId);
 
                     sendToControlChannel(createMessage(
@@ -136,7 +142,6 @@ public class Controller {
                             Integer.toString(getServerId()),
                             fileId));
 
-                    incompleteTasks.remove(fileId);
 
                     try {
                         Thread.sleep(Backup.BACKUP_REPLY_MAX_DELAY);
@@ -151,7 +156,6 @@ public class Controller {
                 try {
                     System.out.println("Sending message " + BACKUP_INIT);
 
-
                     byte[] chunkBody = fileManager.loadChunk(fileId, chunkNo);
 
                     sendToBackupChannel(createMessage(
@@ -162,14 +166,13 @@ public class Controller {
                             fileId,
                             Integer.toString(chunkNo),
                             Integer.toString(desiredReplicationDegrees.get(fileId))));
-
                 } catch (IOException e) {
                     System.out.println("Error getting chunk path...");
                 }
             }
         });
+        System.out.println("Finished.");
     }
-
 
     /**
      * Sends message to Backup Channel
@@ -375,10 +378,8 @@ public class Controller {
         /* Peer that initiated backup marks backup task as completed */
         if (getProtocolVersion() > 1.0) {
             if (incompleteTasks.containsKey(fileId)) {
-                incompleteTasks.get(fileId).remove(chunkNo);
-
-                if (incompleteTasks.get(fileId).isEmpty())
-                    incompleteTasks.remove(fileId);
+                removeChunkFromIncompleteTask(fileId, chunkNo);
+                saveIncompleteTasks();
             }
         }
 
@@ -574,8 +575,8 @@ public class Controller {
 
         /* Add chunk to Incompleted Tasks HashMap */
         if (getProtocolVersion() > 1.0) {
-            incompleteTasks.putIfAbsent(fileId, new ConcurrentSkipListSet<>());
-            incompleteTasks.get(fileId).add(chunkNo);
+            addChunkToIncompleteTask(fileId, chunkNo);
+            saveIncompleteTasks();
         }
 
         executorService.schedule(() -> controlChannel.sendMessage(
@@ -674,6 +675,7 @@ public class Controller {
         chunkCurrentReplicationDegree.put(backup.getFileId(), chunksReplicationDegree);
         desiredReplicationDegrees.put(backup.getFileId(), backup.getDesiredReplicationDegree());
         backedUpFiles.put(backup.getFileId(), backup.getFilename());
+        fileManager.saveServerMetadata();
 
         boolean ret = backup.start(this, chunksReplicationDegree);
         fileManager.saveServerMetadata();
@@ -927,15 +929,35 @@ public class Controller {
         this.backedUpFiles = backedUpFiles;
     }
 
-    public void newMetadata() {
+    public void newServerMetadata() {
         storedChunks = new ConcurrentHashMap<>();
         desiredReplicationDegrees = new ConcurrentHashMap<>();
         chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
         backedUpFiles = new ConcurrentHashMap<>();
-        incompleteTasks = new ConcurrentHashMap<>();
     }
 
-    public void setIncompleteTasks(ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> incompleteTasks) {
+    public synchronized void setIncompleteTasks(ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> incompleteTasks) {
         this.incompleteTasks = incompleteTasks;
+    }
+
+    public synchronized void addChunkToIncompleteTask(String fileId, int chunkNo) {
+        ConcurrentSkipListSet<Integer> incompleteChunks = incompleteTasks.computeIfAbsent(fileId, k -> new ConcurrentSkipListSet<>());
+
+        incompleteChunks.add(chunkNo);
+    }
+
+    public synchronized void removeFileFromIncompleteTask(String fileId) {
+        incompleteTasks.remove(fileId);
+    }
+
+    public synchronized void removeChunkFromIncompleteTask(String fileId, int chunkNo) {
+        ConcurrentSkipListSet<Integer> incompleteChunks = incompleteTasks.get(fileId);
+
+        if (incompleteChunks != null)
+            incompleteChunks.remove(chunkNo);
+    }
+
+    public synchronized void saveIncompleteTasks() {
+        fileManager.saveIncompleteTasks(incompleteTasks);
     }
 }

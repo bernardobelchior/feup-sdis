@@ -20,6 +20,8 @@ public class FileManager {
      */
     private static final String RESTORED_DIR = "RestoredFiles";
 
+    private final static String INCOMPLETE_TASKS_FILE_NAME = ".incomplete";
+
     private final String baseDir;
     private final String chunkDir;
     private final String restoredDir;
@@ -136,7 +138,6 @@ public class FileManager {
         return hasSpaceAvailable(0);
     }
 
-
     public synchronized boolean increaseUsedSpace(long size) {
         if (!hasSpaceAvailable(size))
             return false;
@@ -237,7 +238,6 @@ public class FileManager {
             objectOutputStream.writeObject(controller.getDesiredReplicationDegrees());
             objectOutputStream.writeObject(controller.getChunkCurrentReplicationDegree());
             objectOutputStream.writeObject(controller.getBackedUpFiles());
-            objectOutputStream.writeObject(controller.getIncompleteTasks());
             System.out.println("Server metadata successfully saved.");
         } catch (IOException e) {
             System.err.println("Could not write to configuration file.");
@@ -267,7 +267,6 @@ public class FileManager {
             controller.setDesiredReplicationDegrees((ConcurrentHashMap<String, Integer>) objectInputStream.readObject());
             controller.setChunkCurrentReplicationDegree((ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject());
             controller.setBackedUpFiles((ConcurrentHashMap<String, String>) objectInputStream.readObject());
-            controller.setIncompleteTasks((ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject());
         } catch (IOException e) {
             System.err.println("Could not read from configuration file.");
             return false;
@@ -295,6 +294,57 @@ public class FileManager {
 
     public byte[] loadChunk(String fileId, int chunkNo) throws IOException {
         return Files.readAllBytes(getChunkPath(fileId, chunkNo));
+    }
+
+    /**
+     * Saves incomplete tasks to disk.
+     *
+     * @param incompleteTasks Incomplete tasks to save.
+     */
+    void saveIncompleteTasks(ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> incompleteTasks) {
+        ObjectOutputStream objectOutputStream;
+        try {
+            objectOutputStream = new ObjectOutputStream(new FileOutputStream(getFile(INCOMPLETE_TASKS_FILE_NAME)));
+        } catch (IOException e) {
+            System.err.println("Could not open incomplete tasks file for writing.");
+            return;
+        }
+
+        try {
+            objectOutputStream.writeObject(incompleteTasks);
+        } catch (IOException e) {
+            System.err.println("Could not write to incomplete tasks file.");
+        }
+    }
+
+    /**
+     * Loads incomplete tasks.
+     *
+     * @return Returns true if the tasks are loaded correctly.
+     */
+    @SuppressWarnings("unchecked")
+    boolean loadIncompleteTasks() {
+        ObjectInputStream objectInputStream;
+
+        try {
+            objectInputStream = new ObjectInputStream(new FileInputStream(getFile(INCOMPLETE_TASKS_FILE_NAME)));
+        } catch (IOException e) {
+            System.err.println("Could not open incomplete tasks file for reading.");
+            return false;
+        }
+
+        try {
+            controller.setIncompleteTasks((ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject());
+        } catch (IOException e) {
+            System.err.println("Could not read from incomplete tasks file.");
+            return false;
+        } catch (ClassNotFoundException e) {
+            System.err.println("Unknown content in incomplete tasks file.");
+            return false;
+        }
+
+        System.out.println("Incomplete tasks loaded successfully.");
+        return true;
     }
 
     void initializeDirs() {
