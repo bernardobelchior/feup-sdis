@@ -158,6 +158,8 @@ public class Controller {
 
                     byte[] chunkBody = fileManager.loadChunk(fileId, chunkNo);
 
+                    updateReplicationDegreeToZero(fileId,chunkNo);
+
                     sendToBackupChannel(createMessage(
                             chunkBody,
                             BACKUP_INIT,
@@ -324,9 +326,19 @@ public class Controller {
             chunksToBackUp.remove(getChunkId(fileId, chunkNo));
         }
 
+        byte[] message = createMessage(
+                Backup.BACKUP_SUCCESS,
+                Double.toString(getProtocolVersion()),
+                Integer.toString(getServerId()),
+                fileId,
+                Integer.toString(chunkNo));
+
         /* If we have already stored the chunk we just received, then just do nothing. */
-        if (storedChunks.containsKey(fileId) && storedChunks.get(fileId).contains(chunkNo))
+        if (storedChunks.containsKey(fileId) && storedChunks.get(fileId).contains(chunkNo)){
+            controlChannel.sendMessage(message);
             return;
+        }
+
 
         /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
         if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
@@ -354,13 +366,6 @@ public class Controller {
 
         if (getProtocolVersion() > 1)
             leaseManager.startLease(fileId);
-
-        byte[] message = createMessage(
-                Backup.BACKUP_SUCCESS,
-                Double.toString(getProtocolVersion()),
-                Integer.toString(getServerId()),
-                fileId,
-                Integer.toString(chunkNo));
 
         if (getProtocolVersion() > 1.0 && protocolVersion > 1.0)
             controlChannel.sendMessage(message);
@@ -579,6 +584,8 @@ public class Controller {
             saveIncompleteTasks();
         }
 
+        updateReplicationDegreeToZero(fileId,chunkNo);
+
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
                         chunkBody,
@@ -641,6 +648,13 @@ public class Controller {
 
         ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
+    }
+
+    public void updateReplicationDegreeToZero(String fileId, int chunkNo){
+        chunkCurrentReplicationDegree.putIfAbsent(fileId, new ConcurrentHashMap<>());
+
+        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
+        chunks.put(chunkNo, 0);
     }
 
     /**

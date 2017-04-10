@@ -127,6 +127,8 @@ public class Backup {
             if (size != CHUNK_SIZE)
                 effectiveChunk = Arrays.copyOf(chunk, size);
 
+            controller.updateReplicationDegreeToZero(fileId,chunkNo);
+
             byte[] message = MessageBuilder.createMessage(
                     effectiveChunk,
                     BACKUP_INIT,
