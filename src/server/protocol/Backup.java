@@ -91,14 +91,16 @@ public class Backup {
             e.printStackTrace();
         }
 
-        if (!waitForChunks(backedUpChunks)) {
+        if (!waitForChunks(backedUpChunks) && getProtocolVersion()>1.0) {
             controller.removeFileFromIncompleteTask(fileId);
             controller.saveIncompleteTasks();
             return false;
         }
 
-        controller.removeFileFromIncompleteTask(fileId);
-        controller.saveIncompleteTasks();
+        if(getProtocolVersion()>1.0) {
+            controller.removeFileFromIncompleteTask(fileId);
+            controller.saveIncompleteTasks();
+        }
         System.out.println("File backup successful.");
         threadPool.shutdown();
         return true;

@@ -555,7 +555,7 @@ public class Controller {
         /* Add chunk to Incomplete Tasks HashMap */
         if (getProtocolVersion() > 1.0) {
             addChunkToIncompleteTask(fileId, chunkNo);
-            saveIncompleteTasks();
+            saveIncompleteTasks();  
         }
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
