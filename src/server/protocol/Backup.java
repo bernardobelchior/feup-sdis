@@ -62,6 +62,9 @@ public class Backup {
             return false;
         }
 
+        if (getProtocolVersion() > 1)
+            controller.getIncompleteTasks().put(getFileId(), new ConcurrentSkipListSet<>());
+
         ArrayList<Future<Boolean>> backedUpChunks = new ArrayList<>();
         try {
             int chunkNo = 0;
@@ -85,14 +88,20 @@ public class Backup {
             try {
                 if (!result.get(1, TimeUnit.MINUTES)) {
                     System.out.println("Could not backup a chunk. File backup failed.");
+                    controller.removeFileFromIncompleteTask(fileId);
+                    controller.saveIncompleteTasks();
                     return false;
                 }
             } catch (InterruptedException | ExecutionException | TimeoutException e) {
                 System.out.println("File backup took too long. Assuming it failed.");
+                controller.removeFileFromIncompleteTask(fileId);
+                controller.saveIncompleteTasks();
                 return false;
             }
         }
 
+        controller.removeFileFromIncompleteTask(fileId);
+        controller.saveIncompleteTasks();
         System.out.println("File backup successful.");
         threadPool.shutdown();
         return true;
@@ -109,10 +118,10 @@ public class Backup {
         return threadPool.submit(() -> {
             byte[] effectiveChunk = chunk;
 
-               /* Add chunk to Incompleted Tasks HashMap */
+            /* Add chunk to Incomplete Tasks HashMap */
             if (getProtocolVersion() > 1.0) {
-                controller.getIncompleteTasks().putIfAbsent(getFileId(), new ConcurrentSkipListSet<>());
-                controller.getIncompleteTasks().get(getFileId()).add(chunkNo);
+                controller.addChunkToIncompleteTask(fileId, chunkNo);
+                controller.saveIncompleteTasks();
             }
 
             if (size != CHUNK_SIZE)
@@ -155,7 +164,6 @@ public class Backup {
      *
      * @return File ID
      */
-
     private String generateFileId() {
         String bitString = filename + Long.toString(file.lastModified()) + Boolean.toString(file.canRead()) + Boolean.toString(file.canWrite()) + Boolean.toString(file.canExecute());
         return DatatypeConverter.printHexBinary(Utils.sha256(bitString));

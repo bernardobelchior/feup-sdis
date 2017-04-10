@@ -28,6 +28,7 @@ class TestApp {
 
         switch (operation) {
             case "BACKUP":
+            case "BACKUPENH":
                 pathName = args[2];
                 int replicationDegree = Integer.parseInt(args[3]);
                 try {
@@ -39,6 +40,7 @@ class TestApp {
                 }
                 break;
             case "RESTORE":
+            case "RESTOREENH":
                 pathName = args[2];
                 try {
                     if (initiatorPeer.restore(pathName))
@@ -49,6 +51,7 @@ class TestApp {
                 }
                 break;
             case "DELETE":
+            case "DELETEENH":
                 pathName = args[2];
                 try {
                     if (initiatorPeer.delete(pathName))
@@ -59,6 +62,7 @@ class TestApp {
                 }
                 break;
             case "RECLAIM":
+            case "RECLAIMENH":
                 int maximumDiskSpace = Integer.parseInt(args[2]);
                 try {
                     initiatorPeer.reclaim(maximumDiskSpace);
