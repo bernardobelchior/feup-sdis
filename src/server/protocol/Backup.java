@@ -31,7 +31,6 @@ public class Backup {
     protected final String fileId;
     protected final File file;
     private final int MAX_BACKUP_THREADS = 10;
-    protected ConcurrentHashMap<Integer, Integer> chunksReplicationDegree;
     protected final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_BACKUP_THREADS);
 
     protected Controller controller;
@@ -46,13 +45,11 @@ public class Backup {
     /**
      * Starts the file backup process.
      *
-     * @param controller              Controller that handles message delivering.
-     * @param chunksReplicationDegree Chunks current replication degree.
+     * @param controller Controller that handles message delivering.
      * @return Returns true if the process is successful, returning false otherwise.
      */
-    public boolean start(Controller controller, ConcurrentHashMap<Integer, Integer> chunksReplicationDegree) {
+    public boolean start(Controller controller) {
         this.controller = controller;
-        this.chunksReplicationDegree = chunksReplicationDegree;
 
         FileInputStream inputStream;
         try {
@@ -140,8 +137,6 @@ public class Backup {
             if (size != CHUNK_SIZE)
                 effectiveChunk = Arrays.copyOf(chunk, size);
 
-            controller.resetReplicationDegree(fileId, chunkNo);
-
             byte[] message = MessageBuilder.createMessage(
                     effectiveChunk,
                     BACKUP_INIT,
@@ -161,7 +156,7 @@ public class Backup {
                     e.printStackTrace();
                 }
                 attempts++;
-            } while (chunksReplicationDegree.getOrDefault(chunkNo, 0) < desiredReplicationDegree
+            } while (controller.getCurrentReplicationDegree(fileId, chunkNo) < desiredReplicationDegree
                     && attempts < MAX_BACKUP_ATTEMPTS);
 
             if (attempts >= MAX_BACKUP_ATTEMPTS) {
@@ -169,7 +164,7 @@ public class Backup {
                 return false;
             }
 
-            System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + chunksReplicationDegree.getOrDefault(chunkNo, 0) + ".");
+            System.out.println("Backup of chunk number " + chunkNo + " successful with replication degree of at least " + controller.getCurrentReplicationDegree(fileId, chunkNo) + ".");
             return true;
         });
     }

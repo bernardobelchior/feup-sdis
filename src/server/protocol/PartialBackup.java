@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.util.ArrayList;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.Future;
 
@@ -25,14 +24,12 @@ public class PartialBackup extends Backup {
     /**
      * Starts the file backup process.
      *
-     * @param controller              Controller that handles message delivering.
-     * @param chunksReplicationDegree Chunks current replication degree.
+     * @param controller Controller that handles message delivering.
      * @return Returns true if the process is successful, returning false otherwise.
      */
     @Override
-    public boolean start(Controller controller, ConcurrentHashMap<Integer, Integer> chunksReplicationDegree) {
+    public boolean start(Controller controller) {
         this.controller = controller;
-        this.chunksReplicationDegree = chunksReplicationDegree;
 
         RandomAccessFile inputStream;
         try {

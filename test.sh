@@ -48,7 +48,8 @@ fi
 
 
 # Launch Multicast Snooper
-eval $terminal "\"java -jar McastSnooper.jar $mcAddr:$mcPort $mdbAddr:$mdbPort $mdrAddr:$mdrPort; read\" &"
+rm log.txt
+eval $terminal "\"java -jar McastSnooper.jar $mcAddr:$mcPort $mdbAddr:$mdbPort $mdrAddr:$mdrPort >& log.txt; read\" &"
 
 cd $1
 

@@ -236,8 +236,8 @@ public class FileManager {
             objectOutputStream.writeLong(getMaxStorageSize());
             objectOutputStream.writeObject(controller.getStoredChunks());
             objectOutputStream.writeObject(controller.getDesiredReplicationDegrees());
-            objectOutputStream.writeObject(controller.getChunkCurrentReplicationDegree());
             objectOutputStream.writeObject(controller.getBackedUpFiles());
+            objectOutputStream.writeObject(controller.getPeersStoringChunks());
             System.out.println("Server metadata successfully saved.");
         } catch (IOException e) {
             System.err.println("Could not write to configuration file.");
@@ -265,8 +265,8 @@ public class FileManager {
             maxStorageSize = objectInputStream.readLong();
             controller.setStoredChunks((ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>>) objectInputStream.readObject());
             controller.setDesiredReplicationDegrees((ConcurrentHashMap<String, Integer>) objectInputStream.readObject());
-            controller.setChunkCurrentReplicationDegree((ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>>) objectInputStream.readObject());
             controller.setBackedUpFiles((ConcurrentHashMap<String, String>) objectInputStream.readObject());
+            controller.setPeersStoringChunks((ConcurrentHashMap<String, ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>>>) objectInputStream.readObject());
         } catch (IOException e) {
             System.err.println("Could not read from configuration file.");
             return false;

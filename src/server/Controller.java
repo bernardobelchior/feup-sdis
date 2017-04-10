@@ -49,9 +49,9 @@ public class Controller {
     private final ConcurrentHashMap<String, ScheduledExecutorService> chunksToSend = new ConcurrentHashMap<>();
 
     /**
-     * Concurrent HashMap with fileId and Concurrent HashMap with file's chunkNo and respective replication degree
+     * Saves every peer that stores the specified chunk.
      */
-    private ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> chunkCurrentReplicationDegree;
+    private ConcurrentHashMap<String, ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>>> peersStoringChunk;
 
     /**
      * Concurrent HashMap with fileId and respective desired Replication Degree
@@ -290,19 +290,19 @@ public class Controller {
 
         /* If we have already stored the chunk we just received, then just do nothing. */
         if (storedChunks.containsKey(fileId) && storedChunks.get(fileId).contains(chunkNo)) {
+            addPeerStoringChunk(fileId, chunkNo, getServerId());
             controlChannel.sendMessage(message);
             return;
         }
 
         /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
-        if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
+        if (getCurrentReplicationDegree(fileId, chunkNo) >= desiredReplicationDegree)
             return;
 
         try {
             /* Update used space after backing up chunk */
             if (fileManager.storeChunk(fileId, chunkNo, byteArrayInputStream)) {
                 System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
-                incrementReplicationDegree(fileId, chunkNo);
             } else {
                 System.out.println("Not enough space to store chunk " + chunkNo + " from fileId " + fileId + ".");
                 return;
@@ -342,8 +342,16 @@ public class Controller {
             }
         }
 
-        if (senderId != getServerId())
-            incrementReplicationDegree(fileId, chunkNo);
+        addPeerStoringChunk(fileId, chunkNo, senderId);
+    }
+
+    private synchronized void addPeerStoringChunk(String fileId, int chunkNo, int serverId) {
+        ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>> peersStoringFile = peersStoringChunk.getOrDefault(fileId, new ConcurrentHashMap<>());
+        peersStoringChunk.putIfAbsent(fileId, peersStoringFile);
+
+        ConcurrentSkipListSet<Integer> peersStoringChunk = peersStoringFile.getOrDefault(chunkNo, new ConcurrentSkipListSet<>());
+        peersStoringFile.putIfAbsent(chunkNo, peersStoringChunk);
+        peersStoringChunk.add(serverId);
     }
 
     /**
@@ -511,7 +519,7 @@ public class Controller {
      * @throws IOException In case of error getting chunk path
      */
     private void processReclaimMessage(int serverId, String fileId, int chunkNo) throws IOException {
-        decrementReplicationDegree(fileId, chunkNo);
+        removePeerStoringChunk(fileId, chunkNo, serverId);
 
         if (serverId == getServerId())
             return;
@@ -522,7 +530,7 @@ public class Controller {
             return;
 
         /* Chunk Replication Degree is greater than the desired Replication Degree for that fileId */
-        if (chunkCurrentReplicationDegree.get(fileId).get(chunkNo) >= desiredReplicationDegrees.get(fileId))
+        if (getCurrentReplicationDegree(fileId, chunkNo) >= desiredReplicationDegrees.get(fileId))
             return;
 
         ScheduledExecutorService executorService = Executors.newSingleThreadScheduledExecutor();
@@ -538,8 +546,6 @@ public class Controller {
             saveIncompleteTasks();
         }
 
-        resetReplicationDegree(fileId, chunkNo);
-
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
                         chunkBody,
@@ -551,6 +557,17 @@ public class Controller {
                         Integer.toString(desiredReplicationDegrees.get(fileId)))),
                 randomBetween(RECLAIM_REPLY_MIN_DELAY, RECLAIM_REPLY_MAX_DELAY),
                 TimeUnit.MILLISECONDS);
+    }
+
+    private synchronized void removePeerStoringChunk(String fileId, int chunkNo, int serverId) {
+        ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>> peersStoringFile = peersStoringChunk.get(fileId);
+
+        if (peersStoringFile != null) {
+            ConcurrentSkipListSet<Integer> peersStoringChunk = peersStoringFile.get(chunkNo);
+
+            if (peersStoringChunk != null)
+                peersStoringChunk.remove(serverId);
+        }
     }
 
     /**
@@ -592,40 +609,6 @@ public class Controller {
     }
 
     /**
-     * Increments replication degree
-     *
-     * @param fileId  File Id
-     * @param chunkNo Chunk number
-     */
-    private void incrementReplicationDegree(String fileId, int chunkNo) {
-        chunkCurrentReplicationDegree.putIfAbsent(fileId, new ConcurrentHashMap<>());
-
-        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
-        chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
-    }
-
-    public void resetReplicationDegree(String fileId, int chunkNo) {
-        chunkCurrentReplicationDegree.putIfAbsent(fileId, new ConcurrentHashMap<>());
-        chunkCurrentReplicationDegree.get(fileId).put(chunkNo, 0);
-    }
-
-    /**
-     * Decrements replication degree
-     *
-     * @param fileId  File Id
-     * @param chunkNo Chunk number
-     */
-    public void decrementReplicationDegree(String fileId, int chunkNo) {
-        int replicationDegree = getCurrentReplicationDegree(fileId, chunkNo) - 1;
-
-        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
-        if (replicationDegree < 1)
-            chunks.remove(chunkNo);
-        else
-            chunks.put(chunkNo, replicationDegree);
-    }
-
-    /**
      * Starts file backup
      *
      * @param backup File backup protocol.
@@ -638,12 +621,11 @@ public class Controller {
             return true;
         }
 
-        chunkCurrentReplicationDegree.putIfAbsent(backup.getFileId(), new ConcurrentHashMap<>());
         desiredReplicationDegrees.put(backup.getFileId(), backup.getDesiredReplicationDegree());
         backedUpFiles.putIfAbsent(backup.getFileId(), backup.getFilename());
         fileManager.saveServerMetadata();
 
-        boolean ret = backup.start(this, chunkCurrentReplicationDegree.get(backup.getFileId()));
+        boolean ret = backup.start(this);
         fileManager.saveServerMetadata();
         return ret;
     }
@@ -716,7 +698,7 @@ public class Controller {
         storedChunks.forEachEntry(10, file -> {
             String fileId = file.getKey();
             for (Integer chunk : file.getValue()) {
-                int diff = chunkCurrentReplicationDegree.get(fileId).get(chunk) - desiredReplicationDegrees.get(fileId);
+                int diff = getCurrentReplicationDegree(fileId, chunk) - desiredReplicationDegrees.get(fileId);
                 leastNecessaryChunks.add(new ChunkReplication(fileId, chunk, diff));
             }
         });
@@ -766,13 +748,12 @@ public class Controller {
             sb.append("\n\tDesired Replication Degree: ");
             sb.append(desiredReplicationDegrees.get(file.getKey()));
 
-            if (chunkCurrentReplicationDegree.containsKey(file.getKey()))
-                for (Map.Entry<Integer, Integer> chunk : chunkCurrentReplicationDegree.get(file.getKey()).entrySet()) {
-                    sb.append("\n\t\tChunk No: ");
-                    sb.append(chunk.getKey());
-                    sb.append("\n\t\tReplication Degree: ");
-                    sb.append(chunk.getValue());
-                }
+            for (Map.Entry<Integer, ConcurrentSkipListSet<Integer>> chunk : peersStoringChunk.get(file.getKey()).entrySet()) {
+                sb.append("\n\t\tChunk No: ");
+                sb.append(chunk.getKey());
+                sb.append("\n\t\tReplication Degree: ");
+                sb.append(chunk.getValue().size());
+            }
         });
 
         sb.append("\n\n");
@@ -799,7 +780,7 @@ public class Controller {
                 }
 
                 sb.append("\n\t\t\tReplication degree: ");
-                sb.append(chunkCurrentReplicationDegree.get(fileChunk.getKey()).getOrDefault(chunkNo, 0));
+                sb.append(getCurrentReplicationDegree(fileChunk.getKey(), chunkNo));
             });
         });
 
@@ -832,19 +813,22 @@ public class Controller {
         return incompleteTasks;
     }
 
-    public int getCurrentReplicationDegree(String fileId, int chunkNo) {
-        ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = chunkCurrentReplicationDegree.get(fileId);
+    public synchronized int getCurrentReplicationDegree(String fileId, int chunkNo) {
+        ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>> peersStoringFile = peersStoringChunk.get(fileId);
 
-        if (chunksReplicationDegree == null)
+        if (peersStoringFile == null)
             return 0;
 
-        return chunksReplicationDegree.getOrDefault(chunkNo, 0);
+        ConcurrentSkipListSet<Integer> peersStoringChunk = peersStoringFile.get(chunkNo);
+        if (peersStoringChunk != null)
+            return peersStoringChunk.size();
+        else
+            return 0;
     }
 
     public void localChunkDeleted(String fileId, int chunkNo) {
         ConcurrentSkipListSet<Integer> chunks = storedChunks.get(fileId);
-
-        decrementReplicationDegree(fileId, chunkNo);
+        removePeerStoringChunk(fileId, chunkNo, getServerId());
 
         if (chunks != null)
             chunks.remove(chunkNo);
@@ -855,16 +839,12 @@ public class Controller {
     }
 
     public void fileDeleted(String fileId) {
+        peersStoringChunk.remove(fileId);
         backedUpFiles.remove(fileId);
         desiredReplicationDegrees.remove(fileId);
-        chunkCurrentReplicationDegree.remove(fileId);
 
         if (getProtocolVersion() > 1)
             leaseManager.leaseEnd(fileId);
-    }
-
-    public ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> getChunkCurrentReplicationDegree() {
-        return chunkCurrentReplicationDegree;
     }
 
     public ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> getStoredChunks() {
@@ -887,10 +867,6 @@ public class Controller {
         this.desiredReplicationDegrees = desiredReplicationDegrees;
     }
 
-    public void setChunkCurrentReplicationDegree(ConcurrentHashMap<String, ConcurrentHashMap<Integer, Integer>> chunkCurrentReplicationDegree) {
-        this.chunkCurrentReplicationDegree = chunkCurrentReplicationDegree;
-    }
-
     public void setBackedUpFiles(ConcurrentHashMap<String, String> backedUpFiles) {
         this.backedUpFiles = backedUpFiles;
     }
@@ -898,8 +874,8 @@ public class Controller {
     public void newServerMetadata() {
         storedChunks = new ConcurrentHashMap<>();
         desiredReplicationDegrees = new ConcurrentHashMap<>();
-        chunkCurrentReplicationDegree = new ConcurrentHashMap<>();
         backedUpFiles = new ConcurrentHashMap<>();
+        peersStoringChunk = new ConcurrentHashMap<>();
     }
 
     public synchronized void setIncompleteTasks(ConcurrentHashMap<String, ConcurrentSkipListSet<Integer>> incompleteTasks) {
@@ -925,5 +901,13 @@ public class Controller {
 
     public synchronized void saveIncompleteTasks() {
         fileManager.saveIncompleteTasks(incompleteTasks);
+    }
+
+    public ConcurrentHashMap<String, ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>>> getPeersStoringChunks() {
+        return peersStoringChunk;
+    }
+
+    public void setPeersStoringChunks(ConcurrentHashMap<String, ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>>> peersStoringChunk) {
+        this.peersStoringChunk = peersStoringChunk;
     }
 }
