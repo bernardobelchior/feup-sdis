@@ -314,36 +314,42 @@ public class Controller {
             return;
         }
 
-        /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
-        if (getCurrentReplicationDegree(fileId, chunkNo) >= desiredReplicationDegree)
-            return;
+        ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>> peersStoringFile = peersStoringChunk.getOrDefault(fileId, new ConcurrentHashMap<>());
+        peersStoringChunk.putIfAbsent(fileId, peersStoringFile);
+        ConcurrentSkipListSet<Integer> peersStoringChunk = peersStoringFile.getOrDefault(chunkNo, new ConcurrentSkipListSet<>());
 
-        try {
+        synchronized (peersStoringChunk){
+             /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
+            if (getCurrentReplicationDegree(fileId, chunkNo) >= desiredReplicationDegree)
+                return;
+
+            try {
             /* Update used space after backing up chunk */
-            if (fileManager.storeChunk(fileId, chunkNo, byteArrayInputStream)) {
-                System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
-            } else {
-                System.out.println("Not enough space to store chunk " + chunkNo + " from fileId " + fileId + ".");
+                if (fileManager.storeChunk(fileId, chunkNo, byteArrayInputStream)) {
+                    System.out.println("Stored chunk " + chunkNo + " of fileId " + fileId + ".");
+                } else {
+                    System.out.println("Not enough space to store chunk " + chunkNo + " from fileId " + fileId + ".");
+                    return;
+                }
+            } catch (IOException e) {
+                System.err.println("Could not create file to store chunk. Discarding...");
                 return;
             }
-        } catch (IOException e) {
-            System.err.println("Could not create file to store chunk. Discarding...");
-            return;
-        }
 
         /* If server already has a set for that fileId, adds the new chunkNo, otherwise creates a new Set */
-        ConcurrentSkipListSet<Integer> fileStoredChunks = storedChunks.getOrDefault(fileId, new ConcurrentSkipListSet<>());
+            ConcurrentSkipListSet<Integer> fileStoredChunks = storedChunks.getOrDefault(fileId, new ConcurrentSkipListSet<>());
 
-        fileStoredChunks.add(chunkNo);
-        storedChunks.putIfAbsent(fileId, fileStoredChunks);
+            fileStoredChunks.add(chunkNo);
+            storedChunks.putIfAbsent(fileId, fileStoredChunks);
 
-        if (getProtocolVersion() > 1)
-            leaseManager.startLease(fileId);
+            if (getProtocolVersion() > 1)
+                leaseManager.startLease(fileId);
 
-        if (getProtocolVersion() > 1.0 && protocolVersion > 1.0)
-            controlChannel.sendMessage(message);
-        else
-            controlChannel.sendMessageWithRandomDelay(message, Backup.BACKUP_REPLY_MIN_DELAY, Backup.BACKUP_REPLY_MAX_DELAY);
+            if (getProtocolVersion() > 1.0 && protocolVersion > 1.0)
+                controlChannel.sendMessage(message);
+            else
+                controlChannel.sendMessageWithRandomDelay(message, Backup.BACKUP_REPLY_MIN_DELAY, Backup.BACKUP_REPLY_MAX_DELAY);
+        }
     }
 
     /**
@@ -365,12 +371,16 @@ public class Controller {
     }
 
     private synchronized void addPeerStoringChunk(String fileId, int chunkNo, int serverId) {
+
         ConcurrentHashMap<Integer, ConcurrentSkipListSet<Integer>> peersStoringFile = peersStoringChunk.getOrDefault(fileId, new ConcurrentHashMap<>());
         peersStoringChunk.putIfAbsent(fileId, peersStoringFile);
-
         ConcurrentSkipListSet<Integer> peersStoringChunk = peersStoringFile.getOrDefault(chunkNo, new ConcurrentSkipListSet<>());
-        peersStoringFile.putIfAbsent(chunkNo, peersStoringChunk);
-        peersStoringChunk.add(serverId);
+
+        synchronized (peersStoringChunk){
+            peersStoringFile.putIfAbsent(chunkNo, peersStoringChunk);
+            peersStoringChunk.add(serverId);
+        }
+
     }
 
     /**
@@ -634,8 +644,8 @@ public class Controller {
      * @return Returns true if the backup was successful.
      */
     public boolean startFileBackup(Backup backup) {
-        if (desiredReplicationDegrees.getOrDefault(backup.getFileId(), 0) == backup.getDesiredReplicationDegree()
-                && !incompleteTasks.containsKey(backup.getFileId())) {
+        if (desiredReplicationDegrees.getOrDefault(backup.getFileId(), 0) == backup.getDesiredReplicationDegree()) {
+            if(getProtocolVersion()>1.0 && !incompleteTasks.containsKey(backup.getFileId()))
             System.out.println("File is already backed up in the network with the desired replication degree.");
             return true;
         }
@@ -800,6 +810,7 @@ public class Controller {
 
                 sb.append("\n\t\t\tReplication degree: ");
                 sb.append(getCurrentReplicationDegree(fileChunk.getKey(), chunkNo));
+
             });
         });
 
