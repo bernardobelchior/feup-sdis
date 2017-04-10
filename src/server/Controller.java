@@ -2,6 +2,7 @@ package server;
 
 import server.messaging.Channel;
 import server.protocol.Backup;
+import server.protocol.PartialBackup;
 import server.protocol.Recover;
 
 import java.io.ByteArrayInputStream;
@@ -122,58 +123,12 @@ public class Controller {
     }
 
     private void finishIncompleteTasks() {
-        System.out.println(incompleteTasks.size());
         incompleteTasks.forEachEntry(10, file -> {
             String fileId = file.getKey();
-            removeFileFromIncompleteTask(fileId);
-            System.out.println(fileId);
-            for (Integer chunkNo : file.getValue()) {
-
-                if (!storedChunks.containsKey(fileId) || !storedChunks.get(fileId).contains(chunkNo)) {
-                    System.out.println("Deleting chunks...");
-                    String filename = backedUpFiles.get(fileId);
-
-                    System.out.println(desiredReplicationDegrees.get(fileId));
-                    int replicationDegree = desiredReplicationDegrees.get(fileId);
-
-                    sendToControlChannel(createMessage(
-                            DELETE_INIT,
-                            Double.toString(getProtocolVersion()),
-                            Integer.toString(getServerId()),
-                            fileId));
-
-
-                    try {
-                        Thread.sleep(Backup.BACKUP_REPLY_MAX_DELAY);
-                    } catch (InterruptedException e) {
-                        e.printStackTrace();
-                    }
-
-                    startFileBackup(new Backup(filename, replicationDegree));
-                    return;
-                }
-
-                try {
-                    System.out.println("Sending message " + BACKUP_INIT);
-
-                    byte[] chunkBody = fileManager.loadChunk(fileId, chunkNo);
-
-                    updateReplicationDegreeToZero(fileId,chunkNo);
-
-                    sendToBackupChannel(createMessage(
-                            chunkBody,
-                            BACKUP_INIT,
-                            Double.toString(getProtocolVersion()),
-                            Integer.toString(getServerId()),
-                            fileId,
-                            Integer.toString(chunkNo),
-                            Integer.toString(desiredReplicationDegrees.get(fileId))));
-                } catch (IOException e) {
-                    System.out.println("Error getting chunk path...");
-                }
-            }
+            String filename = backedUpFiles.get(fileId);
+            int replicationDegree = desiredReplicationDegrees.get(fileId);
+            startFileBackup(new PartialBackup(filename, replicationDegree, file.getValue()));
         });
-        System.out.println("Finished.");
     }
 
     /**
@@ -334,11 +289,10 @@ public class Controller {
                 Integer.toString(chunkNo));
 
         /* If we have already stored the chunk we just received, then just do nothing. */
-        if (storedChunks.containsKey(fileId) && storedChunks.get(fileId).contains(chunkNo)){
+        if (storedChunks.containsKey(fileId) && storedChunks.get(fileId).contains(chunkNo)) {
             controlChannel.sendMessage(message);
             return;
         }
-
 
         /* If the current replication degree is greater than or equal to the desired replication degree, then discard the message. */
         if (chunkCurrentReplicationDegree.getOrDefault(fileId, new ConcurrentHashMap<>()).getOrDefault(chunkNo, 0) >= desiredReplicationDegree)
@@ -578,13 +532,13 @@ public class Controller {
 
         System.out.println("Ready to start backup...");
 
-        /* Add chunk to Incompleted Tasks HashMap */
+        /* Add chunk to Incomplete Tasks HashMap */
         if (getProtocolVersion() > 1.0) {
             addChunkToIncompleteTask(fileId, chunkNo);
             saveIncompleteTasks();
         }
 
-        updateReplicationDegreeToZero(fileId,chunkNo);
+        resetReplicationDegree(fileId, chunkNo);
 
         executorService.schedule(() -> controlChannel.sendMessage(
                 createMessage(
@@ -650,11 +604,9 @@ public class Controller {
         chunks.put(chunkNo, chunks.getOrDefault(chunkNo, 0) + 1);
     }
 
-    public void updateReplicationDegreeToZero(String fileId, int chunkNo){
+    public void resetReplicationDegree(String fileId, int chunkNo) {
         chunkCurrentReplicationDegree.putIfAbsent(fileId, new ConcurrentHashMap<>());
-
-        ConcurrentHashMap<Integer, Integer> chunks = chunkCurrentReplicationDegree.get(fileId);
-        chunks.put(chunkNo, 0);
+        chunkCurrentReplicationDegree.get(fileId).put(chunkNo, 0);
     }
 
     /**
@@ -680,18 +632,18 @@ public class Controller {
      * @return Returns true if the backup was successful.
      */
     public boolean startFileBackup(Backup backup) {
-        if (desiredReplicationDegrees.containsKey(backup.getFileId())) {
-            System.out.println("File is already backed up in the network.");
+        if (desiredReplicationDegrees.getOrDefault(backup.getFileId(), 0) == backup.getDesiredReplicationDegree()
+                && !incompleteTasks.containsKey(backup.getFileId())) {
+            System.out.println("File is already backed up in the network with the desired replication degree.");
             return true;
         }
 
-        ConcurrentHashMap<Integer, Integer> chunksReplicationDegree = new ConcurrentHashMap<>();
-        chunkCurrentReplicationDegree.put(backup.getFileId(), chunksReplicationDegree);
+        chunkCurrentReplicationDegree.putIfAbsent(backup.getFileId(), new ConcurrentHashMap<>());
         desiredReplicationDegrees.put(backup.getFileId(), backup.getDesiredReplicationDegree());
-        backedUpFiles.put(backup.getFileId(), backup.getFilename());
+        backedUpFiles.putIfAbsent(backup.getFileId(), backup.getFilename());
         fileManager.saveServerMetadata();
 
-        boolean ret = backup.start(this, chunksReplicationDegree);
+        boolean ret = backup.start(this, chunkCurrentReplicationDegree.get(backup.getFileId()));
         fileManager.saveServerMetadata();
         return ret;
     }

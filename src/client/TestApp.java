@@ -31,6 +31,12 @@ class TestApp {
             case "BACKUPENH":
                 pathName = args[2];
                 int replicationDegree = Integer.parseInt(args[3]);
+
+                if (replicationDegree < 2) {
+                    System.out.println("Desired replication degree is too low. Minimum value is 2.");
+                    return;
+                }
+
                 try {
                     if (initiatorPeer.backup(pathName, replicationDegree))
                         System.out.println("File backup successful.");

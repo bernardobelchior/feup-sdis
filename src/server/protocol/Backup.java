@@ -28,13 +28,13 @@ public class Backup {
 
 
     private final int desiredReplicationDegree;
-    private final String fileId;
-    private final File file;
+    protected final String fileId;
+    protected final File file;
     private final int MAX_BACKUP_THREADS = 10;
-    private ConcurrentHashMap<Integer, Integer> chunksReplicationDegree;
-    private final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_BACKUP_THREADS);
+    protected ConcurrentHashMap<Integer, Integer> chunksReplicationDegree;
+    protected final ExecutorService threadPool = Executors.newFixedThreadPool(MAX_BACKUP_THREADS);
 
-    private Controller controller;
+    protected Controller controller;
 
     public Backup(String filename, int desiredReplicationDegree) {
         this.filename = filename;
@@ -62,8 +62,20 @@ public class Backup {
             return false;
         }
 
-        if (getProtocolVersion() > 1)
+        if (getProtocolVersion() > 1) {
             controller.getIncompleteTasks().put(getFileId(), new ConcurrentSkipListSet<>());
+            int numChunks;
+            try {
+                numChunks = (int) Math.ceil((inputStream.available() + 1) / CHUNK_SIZE) + 1;
+            } catch (IOException e) {
+                System.out.println("Could not get file size. Backup unsuccessful.");
+                return false;
+            }
+
+            for (int i = 0; i < numChunks; i++)
+                controller.addChunkToIncompleteTask(fileId, i);
+            controller.saveIncompleteTasks();
+        }
 
         ArrayList<Future<Boolean>> backedUpChunks = new ArrayList<>();
         try {
@@ -84,6 +96,17 @@ public class Backup {
             e.printStackTrace();
         }
 
+        if (!waitForChunks(backedUpChunks))
+            return false;
+
+        controller.removeFileFromIncompleteTask(fileId);
+        controller.saveIncompleteTasks();
+        System.out.println("File backup successful.");
+        threadPool.shutdown();
+        return true;
+    }
+
+    protected boolean waitForChunks(ArrayList<Future<Boolean>> backedUpChunks) {
         for (Future<Boolean> result : backedUpChunks) {
             try {
                 if (!result.get(1, TimeUnit.MINUTES)) {
@@ -100,10 +123,6 @@ public class Backup {
             }
         }
 
-        controller.removeFileFromIncompleteTask(fileId);
-        controller.saveIncompleteTasks();
-        System.out.println("File backup successful.");
-        threadPool.shutdown();
         return true;
     }
 
@@ -114,20 +133,14 @@ public class Backup {
      * @param chunk   Chunk content.
      * @param size    Chunk size.
      */
-    private Future<Boolean> backupChunk(int chunkNo, byte[] chunk, int size) {
+    protected Future<Boolean> backupChunk(int chunkNo, byte[] chunk, int size) {
         return threadPool.submit(() -> {
             byte[] effectiveChunk = chunk;
-
-            /* Add chunk to Incomplete Tasks HashMap */
-            if (getProtocolVersion() > 1.0) {
-                controller.addChunkToIncompleteTask(fileId, chunkNo);
-                controller.saveIncompleteTasks();
-            }
 
             if (size != CHUNK_SIZE)
                 effectiveChunk = Arrays.copyOf(chunk, size);
 
-            controller.updateReplicationDegreeToZero(fileId,chunkNo);
+            controller.resetReplicationDegree(fileId, chunkNo);
 
             byte[] message = MessageBuilder.createMessage(
                     effectiveChunk,
